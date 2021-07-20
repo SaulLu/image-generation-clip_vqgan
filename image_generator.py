@@ -1,0 +1,530 @@
+#!/usr/bin/env python
+# coding=utf-8
+# Copyright 2021 The HuggingFace Team All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Script to generate an image from a text prompt
+
+Code inspired initially by a notebook made by Katherine Crowson 
+"""
+
+import os
+import logging
+import sys
+import argparse
+import time
+from dataclasses import dataclass, field, asdict
+from pathlib import Path
+from typing import Any, Callable, Optional, List
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+import optax
+import wandb
+from flax import core, struct
+from flax.training.common_utils import get_metrics
+from jax import custom_vjp
+from PIL import Image
+from torchvision.transforms import functional as TF
+from transformers import (
+    set_seed,
+    AutoTokenizer,
+    AutoConfig,
+    CLIPFeatureExtractor,
+    CLIPProcessor,
+    CLIPTokenizer,
+    CLIPTokenizerFast,
+    HfArgumentParser,
+    FlaxCLIPModel,
+    is_tensorboard_available,
+)
+from vqgan_jax.modeling_flax_vqgan import VQModel
+
+class TrainState(struct.PyTreeNode):
+    """Simple train state for the common case with a single Optax optimizer.
+
+    Synopsis::
+
+        state = TrainState.create(
+            apply_fn=model.apply,
+            params=variables['params'],
+            tx=tx)
+        grad_fn = jax.grad(make_loss_fn(state.apply_fn))
+        for batch in data:
+            grads = grad_fn(state.params, batch)
+            state = state.apply_gradients(grads=grads)
+
+    Note that you can easily extend this dataclass by subclassing it for storing
+    additional data (e.g. additional variable collections).
+
+    For more exotic usecases (e.g. multiple optimizers) it's probably best to
+    fork the class and modify it.
+
+    Args:
+        step: Counter starts at 0 and is incremented by every call to
+        `.apply_gradients()`.
+        apply_fn: Usually set to `model.apply()`. Kept in this dataclass for
+        convenience to have a shorter params list for the `train_step()` function
+        in your training loop.
+        params: The parameters to be updated by `tx` and used by `apply_fn`.
+        tx: An Optax gradient transformation.
+        opt_state: The state for `tx`.
+    """
+
+    step: int
+    params: core.FrozenDict[str, Any]
+    tx: optax.GradientTransformation = struct.field(pytree_node=False)
+    opt_state: optax.OptState
+
+    def apply_gradients(self, *, grads, **kwargs):
+        """Updates `step`, `params`, `opt_state` and `**kwargs` in return value.
+
+        Note that internally this function calls `.tx.update()` followed by a call
+        to `optax.apply_updates()` to update `params` and `opt_state`.
+
+        Args:
+        grads: Gradients that have the same pytree structure as `.params`.
+        **kwargs: Additional dataclass attributes that should be `.replace()`-ed.
+
+        Returns:
+        An updated instance of `self` with `step` incremented by one, `params`
+        and `opt_state` updated by applying `grads`, and additional attributes
+        replaced as specified by `kwargs`.
+        """
+        updates, new_opt_state = self.tx.update(grads, self.opt_state, self.params)
+        new_params = optax.apply_updates(self.params, updates)
+        return self.replace(
+            step=self.step + 1,
+            params=new_params,
+            opt_state=new_opt_state,
+            **kwargs,
+        )
+
+    @classmethod
+    def create(cls, *, params, tx, **kwargs):
+        """Creates a new instance with `step=0` and initialized `opt_state`."""
+        opt_state = tx.init(params)
+        return cls(
+            step=0,
+            params=params,
+            tx=tx,
+            opt_state=opt_state,
+            **kwargs,
+        )
+
+
+# f :: a -> b
+@custom_vjp
+def clip_with_grad(x):
+    return jnp.clip(x, a_min=0, a_max=1)
+
+
+# f_fwd :: a -> (b, c)
+def clip_with_grad_fwd(x):
+    return clip_with_grad(x), x
+
+
+# f_bwd :: (c, CT b) -> CT a
+def clip_with_grad_bwd(x, y_bar):
+    ans = clip_with_grad(x)
+    boolean = jnp.heaviside(y_bar * (x - ans), 1)
+    ans_dot = y_bar * boolean
+    return (ans_dot,)
+
+
+clip_with_grad.defvjp(clip_with_grad_fwd, clip_with_grad_bwd)
+
+
+def resample(input, size, align_corners=True):
+    return jax.image.resize(input, size, method="bicubic")
+
+
+def random_resized_crop(img, rng, shape, n_subimg):
+    sideY, sideX = img.shape[2:4]
+    max_size = min(sideX, sideY)
+    min_size = min(sideX, sideY, shape[0])
+    cutouts = []
+    metrics = {}
+
+    for j in range(n_subimg):
+        rng, subrng = jax.random.split(rng)
+        size = int(
+            jax.random.randint(subrng, shape=(1,), minval=0, maxval=1.0) * (max_size - min_size) + min_size
+        )  # **self.cut_pow
+
+        rng, subrng = jax.random.split(rng)
+        offsetx = int(jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideX - size + 1))
+
+        rng, subrng = jax.random.split(rng)
+        offsety = int(jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideY - size + 1))
+        cutout = img[:, :, offsety : offsety + size, offsetx : offsetx + size]
+
+        tmp_img = np.moveaxis(np.asarray((cutout[0] * 255).astype(np.uint8)), 0, -1)
+        image = Image.fromarray(tmp_img)
+
+        # resize
+        final_shape = img.shape
+        final_shape = jax.ops.index_update(final_shape, jax.ops.index[-2], shape[0])
+        final_shape = jax.ops.index_update(final_shape, jax.ops.index[-1], shape[1])
+        cutout = resample(cutout, final_shape)
+        cutouts.append(cutout)
+
+        # tmp show cutouts
+        tmp_img = np.moveaxis(np.asarray((cutout[0] * 255).astype(np.uint8)), 0, -1)
+        image = Image.fromarray(tmp_img)
+        metrics[f"cutout {j}"] = wandb.Image(image)
+
+    imgs_stacked = jnp.concatenate(cutouts, axis=0)
+    return clip_with_grad(imgs_stacked), metrics
+
+def train_step(rng, state, text_embeds, n_subimg, vqgan_get_image_features_fn, clip_decode_fn, clip_quantize_fn):
+    def loss_fn(params, rng):
+        z_latent_q = clip_quantize_fn(params)
+        output_vqgan_decoder = clip_with_grad((clip_decode_fn(z_latent_q) + 1) / 2)  # deterministic ??
+
+        output_vqgan_decoder_reshaped = jnp.moveaxis(output_vqgan_decoder, (2, 1), (3, 2))
+
+        rng, subrng = jax.random.split(rng)
+        imgs_stacked, metrics = random_resized_crop(
+            output_vqgan_decoder_reshaped, subrng, shape=(cut_size, cut_size), n_subimg=n_subimg
+        )
+
+        image_embeds = vqgan_get_image_features_fn(pixel_values=imgs_stacked)
+
+        # normalized features
+        image_embeds = image_embeds / jnp.linalg.norm(image_embeds, axis=-1, keepdims=True)
+
+        # compute distance
+        embed_img = jnp.expand_dims(image_embeds, axis=1)
+        embed_txt = jnp.expand_dims(text_embeds, axis=0)
+        dists = jnp.add(embed_img, -embed_txt)
+        dists = jax.numpy.linalg.norm(dists, ord=2, axis=2)
+        dists = jnp.arcsin(dists / 2) ** 2 * 2
+        loss = dists.mean()
+        return loss, (output_vqgan_decoder, metrics)
+
+    rng, subrng = jax.random.split(rng)
+    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+    (loss, (output_vqgan_decoder, metrics)), grad = grad_fn(state.params, subrng)
+
+    new_state = state.apply_gradients(grads=grad)
+
+    image = Image.fromarray(np.asarray((output_vqgan_decoder[0] * 255).astype(np.uint8)))
+
+    metrics.update({"loss": np.array(loss), "step": state.step, "image": wandb.Image(image)})
+
+    return new_state, metrics
+
+
+
+@dataclass
+class ModelArguments:
+    """
+    Arguments
+    """
+
+    clip_model_name_or_path: Optional[str] = field(
+        default="openai/clip-vit-base-patch32",
+        metadata={"help": "The model checkpoint for weights initialization of CLIP model."},
+    )
+    clip_config_name: Optional[str] = field(
+        default=None, metadata={"help": "Pretrained config name or path if not the same as clip_model_name_or_path"}
+    )
+    clip_tokenizer_name: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Pretrained tokenizer name or path used to tokenize the textual prompts if not the same as clip_model_name_or_path"
+        },
+    )
+    vqgan_model_name_or_path: Optional[str] = field(
+        default="valhalla/vqgan-imagenet-f16-1024",
+        metadata={"help": "The model checkpoint for weights initialization of VQGAN model."},
+    )
+    vqgan_config_name: Optional[str] = field(
+        default=None, metadata={"help": "Pretrained config name or path if not the same as vqgan_model_name_or_path"}
+    )
+
+    cache_dir: Optional[str] = field(
+        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
+    )
+    use_fast_tokenizer: bool = field(
+        default=False,  # todo: change
+        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+    )
+
+
+@dataclass
+class ImageGenerationArguments:
+    texts_prompts: List[str] = field(
+        metadata={"help": "the list of texts that the generated image should look like."},
+    )
+    image_width: Optional[int] = field(
+        default=480,
+        metadata={"help": "The width of the generated image."},
+    )
+    image_height: Optional[int] = field(
+        default=480,
+        metadata={"help": "The height of the generated image."},
+    )
+
+
+@dataclass
+class TrainingArguments:
+
+    output_dir: str = field(
+        metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
+    )
+    overwrite_output_dir: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Overwrite the content of the output directory."
+                "Use this to continue training if output_dir points to a checkpoint directory."
+            )
+        },
+    )
+    learning_rate: float = field(default=0.05, metadata={"help": "The initial learning rate for AdamW."})
+    weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
+    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
+    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
+    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
+
+    max_steps: int = field(
+        default=-1,
+        metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
+    )
+    # lr_scheduler_type: SchedulerType = field(
+    #     default="linear",
+    #     metadata={"help": "The scheduler type to use."},
+    # )
+    # warmup_ratio: float = field(
+    #     default=0.0, metadata={"help": "Linear warmup over warmup_ratio fraction of total steps."}
+    # )
+    # warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
+
+    logging_steps: int = field(default=1, metadata={"help": "Log every X updates steps."})
+    save_steps: int = field(default=0, metadata={"help": "Save image every X updates steps."})
+    save_total_limit: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Limit the total amount of images."
+                "Deletes the older images in the output_dir. Default is unlimited checkpoints"
+            )
+        },
+    )
+    seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
+    cut_num: Optional[int] = field(
+        default=5,
+        metadata={
+            "help": (
+                "The number of random samples to extract from the image decoded by VQGAN in order "
+                "to compute their embeddings with CLIP and compare each of these embeddings with "
+                "each of the textual prompts embeddings."
+            )
+        },
+    )
+
+
+if __name__ == "__main__":
+    # See all possible arguments in src/transformers/training_args.py
+    # or by passing the --help flag to this script.
+    # We now keep distinct sets of args, for a cleaner separation of concerns.
+
+    parser = HfArgumentParser((ModelArguments, ImageGenerationArguments, TrainingArguments))
+    if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
+        # If we pass only one argument to the script and it's the path to a json file,
+        # let's parse it to get our arguments.
+        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+    else:
+        model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    if (
+        os.path.exists(training_args.output_dir)
+        and os.listdir(training_args.output_dir)
+        and not training_args.overwrite_output_dir
+    ):
+        raise ValueError(
+            f"Output directory ({training_args.output_dir}) already exists and is not empty."
+            "Use --overwrite_output_dir to overcome."
+        )
+
+    # Setup logging
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        level="NOTSET",
+        datefmt="[%X]",
+    )
+
+    # Log on each process the small summary:
+    logger = logging.getLogger(__name__)
+
+    # Set seed before initializing model.
+    set_seed(training_args.seed)
+
+    logger.info(f"Training/evaluation parameters {training_args}")
+
+    # Load clip tokenizer
+    if model_args.clip_tokenizer_name:
+        tokenizer = CLIPTokenizer.from_pretrained(
+            model_args.clip_tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+        )
+    elif model_args.clip_model_name_or_path:
+        tokenizer = CLIPTokenizer.from_pretrained(
+            model_args.clip_model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+        )
+    else:
+        raise ValueError(
+            "This script does not train a model, you must choose already trained tokenizers, using --tokenizer_name."
+        )
+
+    # Load CLIP model
+    if model_args.clip_config_name:
+        clip_config = AutoConfig.from_pretrained(model_args.clip_config_name, cache_dir=model_args.cache_dir)
+    elif model_args.clip_model_name_or_path:
+        clip_config = AutoConfig.from_pretrained(model_args.clip_model_name_or_path, cache_dir=model_args.cache_dir)
+    else:
+        raise ValueError(
+            "This script does not train a model, you must choose an already trained CLIP model, using --clip_model_name_or_path."
+        )
+
+    if model_args.clip_model_name_or_path:
+        clip_model = FlaxCLIPModel.from_pretrained(
+            model_args.clip_model_name_or_path,
+            config=clip_config,
+        )
+    else:
+        raise ValueError(
+            "This script does not train a model, you must choose an already trained CLIP model, using --clip_model_name_or_path."
+        )
+
+    # Load VQGAN model
+    # not merged yet
+    # if model_args.vqgan_config_name:
+    #     vqgan_config = AutoConfig.from_pretrained(model_args.vqgan_config_name, cache_dir=model_args.cache_dir)
+    # elif model_args.vqgan_model_name_or_path:
+    #     vqgan_config = AutoConfig.from_pretrained(model_args.vqgan_model_name_or_path, cache_dir=model_args.cache_dir)
+    # else:
+    #     raise ValueError(
+    #         "This script does not train a model, you must choose an already trained CLIP model, using --vqgan_model_name_or_path."
+    #     )
+
+    if model_args.vqgan_model_name_or_path:
+        vqgan_model = VQModel.from_pretrained(
+            model_args.vqgan_model_name_or_path,
+            # config=vqgan_config, # not merged yet
+        )
+    else:
+        raise ValueError(
+            "This script does not train a model, you must choose an already trained VQGAN model, using --vqgan_model_name_or_path."
+        )
+
+    # init logging utils
+    combined_dict = {
+        **asdict(model_args),
+        **asdict(data_args),
+        **asdict(training_args),
+    }
+    wandb.init(project="vqgan-clip", dir=training_args.output_dir)
+    wandb.config.update(combined_dict, allow_val_change=True)
+
+    context_length = clip_model.config.text_config.max_position_embeddings
+
+    cut_size = clip_model.config.vision_config.image_size
+    e_dim = vqgan_model.config.embed_dim
+
+    f = 2 ** (vqgan_model.config.num_resolutions - 1)
+
+    n_toks = vqgan_model.config.n_embed
+    toksX, toksY = data_args.image_width // f, data_args.image_height // f
+    sideX, sideY = toksX * f, toksY * f
+
+    # not used
+    # z_min = jnp.min(model.params["quantize"]["embedding"]["embedding"], axis=0)
+    # z_max = jnp.max(model.params["quantize"]["embedding"]["embedding"], axis=0)
+
+    # Create the text CLIP embeddings of the textual prompts
+    def create_text_embedding(batch):
+        text_embeds = clip_model.get_text_features(**batch)
+
+        # normalized features
+        text_embeds = text_embeds / jnp.linalg.norm(text_embeds, axis=-1, keepdims=True)
+
+        return text_embeds
+
+    inputs = tokenizer(data_args.texts_prompts, padding="max_length", max_length=context_length, return_tensors="jax")
+    text_embeds = create_text_embedding(inputs)
+
+    rng = jax.random.PRNGKey(training_args.seed)
+
+    # Create a first random VQGAN latent image representation
+    rng, subrng = jax.random.split(rng)
+    one_hot = jax.nn.one_hot(jax.random.randint(subrng, [toksY * toksX], 0, n_toks), n_toks)
+    z = jnp.matmul(one_hot, vqgan_model.params["quantize"]["embedding"]["embedding"])
+    z = jnp.reshape(z, (-1, toksY, toksX, e_dim))
+
+    # Initialize optimizer
+    optimizer = optax.adamw(
+        learning_rate=training_args.learning_rate,
+        b1=training_args.adam_beta1,
+        b2=training_args.adam_beta2,
+        eps=training_args.adam_epsilon,
+        weight_decay=training_args.weight_decay,
+    )
+
+    state = TrainState.create(params=z, tx=optimizer)
+
+    def straight_through_quantize(x):
+        return x + jax.lax.stop_gradient(vqgan_model.quantize(x)[0] - x)
+
+    vqgan_get_image_features_fn = clip_model.get_image_features
+    clip_decode_fn = vqgan_model.decode
+    clip_quantize_fn = straight_through_quantize
+
+    compt = 0
+    stop_training = False
+    try:
+        train_time = 0
+        while not stop_training:
+            compt += 1
+            # ======================== Training ================================
+            train_start = time.time()
+
+            rng, subrng = jax.random.split(rng)
+            state, train_metric = train_step(
+                    rng=subrng, 
+                    state=state, 
+                    text_embeds=text_embeds, 
+                    n_subimg=training_args.cut_num,
+                    vqgan_get_image_features_fn=vqgan_get_image_features_fn, 
+                    clip_decode_fn=clip_decode_fn, 
+                    clip_quantize_fn=clip_quantize_fn
+                )
+
+            train_time_step = time.time() - train_start
+            train_time += train_time_step
+            
+
+            # trick, not used
+            # state.replace(params= jnp.clip(state.params, a_min=z_min, a_max=z_max))
+
+            # Save metrics
+            train_metric.update({"time": train_time, "train_time_step": train_time_step})
+            if jax.process_index() == 0:
+                wandb.log(train_metric)
+            if training_args.max_steps > 0 and compt > training_args.max_steps:
+                stop_training = True
+    except KeyboardInterrupt:
+        pass
