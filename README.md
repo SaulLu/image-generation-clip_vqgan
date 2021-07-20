@@ -1,1 +1,1 @@
-# image-generation-clip_vqgan
+# Image generation with CLIP and VQGAN
