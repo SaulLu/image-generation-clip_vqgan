@@ -302,7 +302,7 @@ class TrainingArguments:
     adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
 
     max_steps: int = field(
-        default=-1,
+        default=1000,
         metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
     )
     # lr_scheduler_type: SchedulerType = field(
@@ -493,14 +493,11 @@ if __name__ == "__main__":
     clip_decode_fn = vqgan_model.decode
     clip_quantize_fn = straight_through_quantize
 
-    compt = 0
-    stop_training = False
     try:
         train_time = 0
-        while not stop_training:
-            compt += 1
+        for compt in range(training_args.max_steps):
             # ======================== Training ================================
-            jax.profiler.start_trace("/logs/log1")
+            jax.profiler.start_trace("logs")
             train_start = time.time()
 
             rng, subrng = jax.random.split(rng)
@@ -526,7 +523,5 @@ if __name__ == "__main__":
             train_metric.update({"time": train_time, "train_time_step": train_time_step})
             if jax.process_index() == 0:
                 wandb.log(train_metric)
-            if training_args.max_steps > 0 and compt > training_args.max_steps:
-                stop_training = True
     except KeyboardInterrupt:
         pass
