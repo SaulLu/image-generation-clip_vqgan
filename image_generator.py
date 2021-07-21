@@ -194,7 +194,7 @@ def random_resized_crop(img, rng, shape, n_subimg):
 def train_step(rng, state, text_embeds, n_subimg, vqgan_get_image_features_fn, clip_decode_fn, clip_quantize_fn):
     def loss_fn(params, rng):
         z_latent_q = clip_quantize_fn(params)
-        output_vqgan_decoder = clip_with_grad((clip_decode_fn(z_latent_q) + 1) / 2)  # deterministic ??
+        output_vqgan_decoder = (clip_decode_fn(z_latent_q) + 1) / 2  # deterministic ??
 
         output_vqgan_decoder_reshaped = jnp.moveaxis(output_vqgan_decoder, (2, 1), (3, 2))
 
