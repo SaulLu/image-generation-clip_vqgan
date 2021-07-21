@@ -225,13 +225,13 @@ def train_step(rng, state, text_embeds, n_subimg, vqgan_get_image_features_fn, c
 
     image = Image.fromarray(np.asarray((output_vqgan_decoder[0] * 255).astype(np.uint8)))
 
-    metrics.update(
-        {
-            "loss": np.array(loss),
-            "step": state.step,
-            # "image": wandb.Image(image)
-        }
-    )
+    # metrics.update(
+    #     {
+    #         "loss": np.array(loss),
+    #         "step": state.step,
+    #         # "image": wandb.Image(image)
+    #     }
+    # )
 
     return new_state, metrics
 
@@ -444,8 +444,8 @@ if __name__ == "__main__":
         **asdict(data_args),
         **asdict(training_args),
     }
-    wandb.init(project="vqgan-clip", dir=training_args.output_dir)
-    wandb.config.update(combined_dict, allow_val_change=True)
+    # wandb.init(project="vqgan-clip", dir=training_args.output_dir)
+    # wandb.config.update(combined_dict, allow_val_change=True)
 
     context_length = clip_model.config.text_config.max_position_embeddings
 
@@ -504,7 +504,7 @@ if __name__ == "__main__":
         train_time = 0
         for compt in range(training_args.max_steps):
             # ======================== Training ================================
-            # jax.profiler.start_trace("logs")
+            jax.profiler.start_trace("logs")
             train_start = time.time()
 
             rng, subrng = jax.random.split(rng)
@@ -520,14 +520,14 @@ if __name__ == "__main__":
 
             train_time_step = time.time() - train_start
             train_time += train_time_step
-            # jax.profiler.stop_trace()
+            jax.profiler.stop_trace()
 
             # trick, not used
             # state.replace(params= jnp.clip(state.params, a_min=z_min, a_max=z_max))
 
             # Save metrics
-            train_metric.update({"time": train_time, "train_time_step": train_time_step})
-            if jax.process_index() == 0:
-                wandb.log(train_metric)
+            # train_metric.update({"time": train_time, "train_time_step": train_time_step})
+            # if jax.process_index() == 0:
+            #     wandb.log(train_metric)
     except KeyboardInterrupt:
         pass
