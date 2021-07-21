@@ -126,26 +126,26 @@ class TrainState(struct.PyTreeNode):
         )
 
 
-# # f :: a -> b
-# @custom_vjp
-# def clip_with_grad(x):
-#     return jnp.clip(x, a_min=0, a_max=1)
+# f :: a -> b
+@custom_vjp
+def clip_with_grad(x):
+    return jnp.clip(x, a_min=0, a_max=1)
 
 
-# # f_fwd :: a -> (b, c)
-# def clip_with_grad_fwd(x):
-#     return clip_with_grad(x), x
+# f_fwd :: a -> (b, c)
+def clip_with_grad_fwd(x):
+    return clip_with_grad(x), x
 
 
-# # f_bwd :: (c, CT b) -> CT a
-# def clip_with_grad_bwd(x, y_bar):
-#     ans = clip_with_grad(x)
-#     boolean = jnp.heaviside(y_bar * (x - ans), 1)
-#     ans_dot = y_bar * boolean
-#     return (ans_dot,)
+# f_bwd :: (c, CT b) -> CT a
+def clip_with_grad_bwd(x, y_bar):
+    ans = clip_with_grad(x)
+    boolean = jnp.heaviside(y_bar * (x - ans), 1)
+    ans_dot = y_bar * boolean
+    return (ans_dot,)
 
 
-# clip_with_grad.defvjp(clip_with_grad_fwd, clip_with_grad_bwd)
+clip_with_grad.defvjp(clip_with_grad_fwd, clip_with_grad_bwd)
 
 
 def resample(input, size, align_corners=True):
@@ -188,13 +188,13 @@ def random_resized_crop(img, rng, shape, n_subimg):
         # metrics[f"cutout {j}"] = wandb.Image(image)
 
     imgs_stacked = jnp.concatenate(cutouts, axis=0)
-    return imgs_stacked, metrics
+    return clip_with_grad(imgs_stacked), metrics
 
 
 def train_step(rng, state, text_embeds, n_subimg, vqgan_get_image_features_fn, clip_decode_fn, clip_quantize_fn):
     def loss_fn(params, rng):
         z_latent_q = clip_quantize_fn(params)
-        output_vqgan_decoder = (clip_decode_fn(z_latent_q) + 1) / 2  # deterministic ??
+        output_vqgan_decoder = clip_with_grad((clip_decode_fn(z_latent_q) + 1) / 2)  # deterministic ??
 
         output_vqgan_decoder_reshaped = jnp.moveaxis(output_vqgan_decoder, (2, 1), (3, 2))
 
