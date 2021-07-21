@@ -500,6 +500,7 @@ if __name__ == "__main__":
         while not stop_training:
             compt += 1
             # ======================== Training ================================
+            jax.profiler.start_trace("/logs/log1")
             train_start = time.time()
 
             rng, subrng = jax.random.split(rng)
@@ -515,7 +516,8 @@ if __name__ == "__main__":
 
             train_time_step = time.time() - train_start
             train_time += train_time_step
-            
+            state.block_until_ready()
+            jax.profiler.stop_trace()
 
             # trick, not used
             # state.replace(params= jnp.clip(state.params, a_min=z_min, a_max=z_max))
