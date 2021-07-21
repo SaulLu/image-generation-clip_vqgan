@@ -515,6 +515,7 @@ if __name__ == "__main__":
 
             train_time_step = time.time() - train_start
             train_time += train_time_step
+            jax.profiler.save_device_memory_profile(f"memory_{compt}.prof")
             
 
             # trick, not used
