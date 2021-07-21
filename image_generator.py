@@ -52,6 +52,7 @@ from transformers import (
 )
 from vqgan_jax.modeling_flax_vqgan import VQModel
 
+
 class TrainState(struct.PyTreeNode):
     """Simple train state for the common case with a single Optax optimizer.
 
@@ -184,10 +185,11 @@ def random_resized_crop(img, rng, shape, n_subimg):
         # tmp show cutouts
         tmp_img = np.moveaxis(np.asarray((cutout[0] * 255).astype(np.uint8)), 0, -1)
         image = Image.fromarray(tmp_img)
-        metrics[f"cutout {j}"] = wandb.Image(image)
+        # metrics[f"cutout {j}"] = wandb.Image(image)
 
     imgs_stacked = jnp.concatenate(cutouts, axis=0)
     return clip_with_grad(imgs_stacked), metrics
+
 
 def train_step(rng, state, text_embeds, n_subimg, vqgan_get_image_features_fn, clip_decode_fn, clip_quantize_fn):
     def loss_fn(params, rng):
@@ -223,10 +225,15 @@ def train_step(rng, state, text_embeds, n_subimg, vqgan_get_image_features_fn, c
 
     image = Image.fromarray(np.asarray((output_vqgan_decoder[0] * 255).astype(np.uint8)))
 
-    metrics.update({"loss": np.array(loss), "step": state.step, "image": wandb.Image(image)})
+    metrics.update(
+        {
+            "loss": np.array(loss),
+            "step": state.step,
+            # "image": wandb.Image(image)
+        }
+    )
 
     return new_state, metrics
-
 
 
 @dataclass
@@ -502,14 +509,14 @@ if __name__ == "__main__":
 
             rng, subrng = jax.random.split(rng)
             state, train_metric = train_step(
-                    rng=subrng, 
-                    state=state, 
-                    text_embeds=text_embeds, 
-                    n_subimg=training_args.cut_num,
-                    vqgan_get_image_features_fn=vqgan_get_image_features_fn, 
-                    clip_decode_fn=clip_decode_fn, 
-                    clip_quantize_fn=clip_quantize_fn
-                )
+                rng=subrng,
+                state=state,
+                text_embeds=text_embeds,
+                n_subimg=training_args.cut_num,
+                vqgan_get_image_features_fn=vqgan_get_image_features_fn,
+                clip_decode_fn=clip_decode_fn,
+                clip_quantize_fn=clip_quantize_fn,
+            )
 
             train_time_step = time.time() - train_start
             train_time += train_time_step
