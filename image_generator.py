@@ -513,7 +513,6 @@ if __name__ == "__main__":
 
             train_time_step = time.time() - train_start
             train_time += train_time_step
-            state.block_until_ready()
             # jax.profiler.stop_trace()
 
             # trick, not used
