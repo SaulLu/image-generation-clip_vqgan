@@ -349,7 +349,7 @@ if __name__ == "__main__":
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
-
+    jax.profiler.start_trace("logs")
     parser = HfArgumentParser((ModelArguments, ImageGenerationArguments, TrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
@@ -504,7 +504,6 @@ if __name__ == "__main__":
         train_time = 0
         for compt in range(training_args.max_steps):
             # ======================== Training ================================
-            jax.profiler.start_trace("logs")
             train_start = time.time()
 
             rng, subrng = jax.random.split(rng)
@@ -520,7 +519,7 @@ if __name__ == "__main__":
 
             train_time_step = time.time() - train_start
             train_time += train_time_step
-            jax.profiler.stop_trace()
+            
 
             # trick, not used
             # state.replace(params= jnp.clip(state.params, a_min=z_min, a_max=z_max))
@@ -531,3 +530,5 @@ if __name__ == "__main__":
             #     wandb.log(train_metric)
     except KeyboardInterrupt:
         pass
+    
+    jax.profiler.stop_trace()
