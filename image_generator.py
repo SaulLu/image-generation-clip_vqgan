@@ -153,16 +153,17 @@ def resample(input, size, align_corners=True):
 
 def random_resized_crop(img, rng, shape, n_subimg):
     sideY, sideX = img.shape[2:4]
-    max_size = min(sideX, sideY)
+    max_size = min(sideX, sideY, shape[0])
     min_size = min(sideX, sideY, shape[0])
     cutouts = []
     metrics = {}
 
     for j in range(n_subimg):
         rng, subrng = jax.random.split(rng)
-        size = int(
-            jax.random.randint(subrng, shape=(1,), minval=0, maxval=1.0) * (max_size - min_size) + min_size
-        )  # **self.cut_pow
+        # size = int(
+        #     jax.random.randint(subrng, shape=(1,), minval=0, maxval=1.0) * (max_size - min_size) + min_size
+        # )  # **self.cut_pow
+        size = shape[0]
 
         rng, subrng = jax.random.split(rng)
         offsetx = int(jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideX - size + 1))
@@ -437,7 +438,7 @@ if __name__ == "__main__":
         **asdict(data_args),
         **asdict(training_args),
     }
-    wandb.init(project="vqgan-clip", dir=training_args.output_dir)
+    wandb.init(project="vqgan-clip", dir=training_args.output_dir, notes="try fix size crops")
     wandb.config.update(combined_dict, allow_val_change=True)
 
     context_length = clip_model.config.text_config.max_position_embeddings
