@@ -155,10 +155,10 @@ def resized_and_crop(img, rng, final_shape, max_size, min_size):
     size = jax.random.randint(subrng, shape=(1,), minval=0, maxval=(max_size - min_size) + min_size)
 
     rng, subrng = jax.random.split(rng)
-    offsetx = jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideX - size + 1)
+    offsetx = jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideX - size + 1).item()
 
     rng, subrng = jax.random.split(rng)
-    offsety = jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideY - size + 1)
+    offsety = jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideY - size + 1).item()
     cutout = img[:, :, offsety : offsety + size, offsetx : offsetx + size]
 
     # resize
