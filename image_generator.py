@@ -186,7 +186,8 @@ def random_resized_crop(img, rng, shape, n_subimg):
         rng, subrng = jax.random.split(rng)
         cutout = resized_and_crop(img, subrng, final_shape, max_size, min_size, sideX, sideY)
         cutouts.append(cutout)
-
+    
+    cutouts = jnp.concatenate(cutouts, axis=0)
     return cutouts, metrics
 
 def train_step(rng, state, text_embeds, n_subimg, vqgan_get_image_features_fn, clip_decode_fn, clip_quantize_fn):
