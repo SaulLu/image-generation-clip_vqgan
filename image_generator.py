@@ -221,9 +221,11 @@ def train_step(rng, state, text_embeds, n_subimg, vqgan_get_image_features_fn, c
 
     new_state = state.apply_gradients(grads=grad)
 
-    
-
-    metrics.update({"loss": np.array(loss), "step": state.step, "image": wandb.Image(image)})
+    metrics = metrics.update({
+        "loss": np.array(loss), 
+        "step": state.step, 
+        "image": output_vqgan_decoder
+    })
 
     return new_state, metrics
 
@@ -521,9 +523,9 @@ if __name__ == "__main__":
             # state.replace(params= jnp.clip(state.params, a_min=z_min, a_max=z_max))
 
             # Save metrics
-            train_metric.update({"time": train_time, "train_time_step": train_time_step})
             if jax.process_index() == 0:
-                image = Image.fromarray(np.asarray((train_metric["images"][0] * 255).astype(np.uint8)))
+                train_metric.update({"time": train_time, "train_time_step": train_time_step})
+                train_metric["image"] = Image.fromarray(np.asarray((train_metric["image"][0] * 255).astype(np.uint8)))
                 wandb.log(train_metric)
             if training_args.max_steps > 0 and compt > training_args.max_steps:
                 stop_training = True
