@@ -222,7 +222,7 @@ def train_step(rng, state, text_embeds, n_subimg, vqgan_get_image_features_fn, c
 
     new_state = state.apply_gradients(grads=grad)
 
-    metrics = metrics.update({
+    metrics.update({
         "loss": loss, 
         "step": state.step, 
         "image": output_vqgan_decoder
