@@ -150,44 +150,44 @@ clip_with_grad.defvjp(clip_with_grad_fwd, clip_with_grad_bwd)
 def resample(input, size, align_corners=True):
     return jax.image.resize(input, size, method="bicubic")
 
+def resized_and_crop(img, rng, final_shape, max_size, min_size):
+    rng, subrng = jax.random.split(rng)
+    size = int(
+        jax.random.uniform(subrng, shape=(1,), minval=0, maxval=1.0) * (max_size - min_size) + min_size
+    )  # **self.cut_pow
+
+    rng, subrng = jax.random.split(rng)
+    offsetx = int(jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideX - size + 1))
+
+    rng, subrng = jax.random.split(rng)
+    offsety = int(jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideY - size + 1))
+    cutout = img[:, :, offsety : offsety + size, offsetx : offsetx + size]
+
+    # resize
+    return resample(cutout, final_shape)
+
+def tmp_log_cutout(cutout):
+    # todo
+    # tmp show cutouts
+    tmp_img = np.moveaxis(np.asarray((cutout[0] * 255).astype(np.uint8)), 0, -1)
+    image = Image.fromarray(tmp_img)
+    metrics[f"cutout {j}"] = wandb.Image(image)
 
 def random_resized_crop(img, rng, shape, n_subimg):
     sideY, sideX = img.shape[2:4]
     max_size = min(sideX, sideY)
     min_size = min(sideX, sideY, shape[0])
-    cutouts = []
+
+    final_shape = img.shape
+    final_shape = jax.ops.index_update(final_shape, jax.ops.index[-2], shape[0])
+    final_shape = jax.ops.index_update(final_shape, jax.ops.index[-1], shape[1])
+
     metrics = {}
+    resized_and_crop_custom = lambda x: resized_and_crop(img, x, final_shape, max_size, min_size)
+    keys = jax.random.split(rng, n_subimg)
+    cutouts = jax.vmap(resized_and_crop_custom)(keys)
 
-    for j in range(n_subimg):
-        rng, subrng = jax.random.split(rng)
-        size = int(
-            jax.random.randint(subrng, shape=(1,), minval=0, maxval=1.0) * (max_size - min_size) + min_size
-        )  # **self.cut_pow
-
-        rng, subrng = jax.random.split(rng)
-        offsetx = int(jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideX - size + 1))
-
-        rng, subrng = jax.random.split(rng)
-        offsety = int(jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideY - size + 1))
-        cutout = img[:, :, offsety : offsety + size, offsetx : offsetx + size]
-
-        tmp_img = np.moveaxis(np.asarray((cutout[0] * 255).astype(np.uint8)), 0, -1)
-        image = Image.fromarray(tmp_img)
-
-        # resize
-        final_shape = img.shape
-        final_shape = jax.ops.index_update(final_shape, jax.ops.index[-2], shape[0])
-        final_shape = jax.ops.index_update(final_shape, jax.ops.index[-1], shape[1])
-        cutout = resample(cutout, final_shape)
-        cutouts.append(cutout)
-
-        # tmp show cutouts
-        tmp_img = np.moveaxis(np.asarray((cutout[0] * 255).astype(np.uint8)), 0, -1)
-        image = Image.fromarray(tmp_img)
-        metrics[f"cutout {j}"] = wandb.Image(image)
-
-    imgs_stacked = jnp.concatenate(cutouts, axis=0)
-    return clip_with_grad(imgs_stacked), metrics
+    return clip_with_grad(cutouts), metrics
 
 def train_step(rng, state, text_embeds, n_subimg, vqgan_get_image_features_fn, clip_decode_fn, clip_quantize_fn):
     def loss_fn(params, rng):
