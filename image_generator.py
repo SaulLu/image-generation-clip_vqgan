@@ -526,7 +526,7 @@ if __name__ == "__main__":
             # Save metrics
             if jax.process_index() == 0:
                 train_metric.update({"time": train_time, "train_time_step": train_time_step})
-                train_metric["image"] = Image.fromarray(np.asarray((train_metric["image"][0] * 255).astype(np.uint8)))
+                train_metric["image"] = wandb.Image(Image.fromarray(np.asarray((train_metric["image"][0] * 255).astype(np.uint8))))
                 train_metric["loss"] = np.asarray(train_metric["loss"])
                 wandb.log(train_metric)
             if training_args.max_steps > 0 and compt > training_args.max_steps:
