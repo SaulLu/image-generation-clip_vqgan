@@ -448,7 +448,7 @@ def ascend_txt():
     return result
 
 
-def train(i):
+def train(i, train_time):
     train_start = time.time()
 
     opt.zero_grad()
@@ -467,10 +467,11 @@ def train(i):
 
 
 i = 0
+train_time = 0
 try:
     with tqdm() as pbar:
         while True:
-            train(i)
+            train(i, train_time)
             if i == max_iteraciones:
                 break
             i += 1
