@@ -216,7 +216,7 @@ modelo = "vqgan_imagenet_f16_1024"
 intervalo_imagenes = 1
 imagen_inicial = None
 imagenes_objetivo = None
-seed = -1
+seed = 0
 max_iteraciones = 2000
 input_images = ""
 
