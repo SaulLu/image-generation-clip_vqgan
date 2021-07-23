@@ -156,7 +156,7 @@ def tmp_log_cutout(cutout):
 def resample(input, size, align_corners=True):
     return jax.image.resize(input, size, method="bicubic")
 
-@jax.partial(jit, static_argnames=("max_size", "min_size", "sideX", "sideY"))
+@jax.partial(jax.jit, static_argnames=("max_size", "min_size", "sideX", "sideY"))
 def resized_and_crop(img, rng, final_shape, max_size, min_size, sideX, sideY):
     rng, subrng = jax.random.split(rng)
     size = jax.random.randint(subrng, shape=(1,), minval=min_size, maxval=max_size).item()
@@ -171,7 +171,7 @@ def resized_and_crop(img, rng, final_shape, max_size, min_size, sideX, sideY):
     # resize
     return resample(cutout, final_shape)
 
-@jax.partial(jit, static_argnames="n_subimg")
+@jax.partial(jax.jit, static_argnames="n_subimg")
 def random_resized_crop(img, rng, shape, n_subimg):
     sideY, sideX = img.shape[2:4]
     max_size = min(sideX, sideY)
