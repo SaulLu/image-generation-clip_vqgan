@@ -5,6 +5,7 @@ import math
 from pathlib import Path
 import sys
 import wandb
+import time
 
 sys.path.append("./taming-transformers")
 from IPython import display
