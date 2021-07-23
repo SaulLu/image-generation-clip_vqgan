@@ -176,7 +176,7 @@ def random_resized_crop(img, rng, shape, n_subimg):
     min_size = min(sideX, sideY, shape[0])
 
     final_shape = img.shape
-    final_shape = tax.ops.index_update(final_shape, jax.ops.index[-2], shape[0])
+    final_shape = jax.ops.index_update(final_shape, jax.ops.index[-2], shape[0])
     final_shape = jax.ops.index_update(final_shape, jax.ops.index[-1], shape[1])
 
     metrics = {}
@@ -460,8 +460,8 @@ if __name__ == "__main__":
         return x + jax.lax.stop_gradient(vqgan_model.quantize(x)[0] - x)
 
     vqgan_get_image_features_fn = clip_model.get_image_features
-    clip_decode_fn = vqgan_model.decode
-    clip_quantize_fn = straight_through_quantize
+    clip_decode_fn = jax.jit(vqgan_model.decode)
+    clip_quantize_fn = jax.jit(straight_through_quantize)
 
     def train_step(rng, state, text_embeds, n_subimg):
         def loss_fn(params, rng):
