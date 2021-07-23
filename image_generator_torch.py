@@ -441,10 +441,10 @@ def ascend_txt():
         result.append(prompt(iii))
     img = np.array(out.mul(255).clamp(0, 255)[0].cpu().detach().numpy().astype(np.uint8))[:, :, :]
     img = np.transpose(img, (1, 2, 0))
-    filename = f"steps/{i:04}.png"
-    imageio.imwrite(filename, np.array(img))
-    add_stegano_data(filename)
-    add_xmp_data(filename)
+    # filename = f"steps/{i:04}.png"
+    # imageio.imwrite(filename, np.array(img))
+    # add_stegano_data(filename)
+    # add_xmp_data(filename)
     return result
 
 
