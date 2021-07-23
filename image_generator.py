@@ -195,42 +195,7 @@ def speric_distance(embed_img):
     dist = jax.numpy.linalg.norm(dist, ord=2, axis=-1)
     return jnp.arcsin(dist / 2) ** 2 * 2
 
-@jax.jit
-def train_step(rng, state, text_embeds, n_subimg, vqgan_get_image_features_fn, clip_decode_fn, clip_quantize_fn):
-    def loss_fn(params, rng):
-        z_latent_q = clip_quantize_fn(params)
-        output_vqgan_decoder = clip_with_grad((clip_decode_fn(z_latent_q) + 1) / 2)  # deterministic ??
 
-        output_vqgan_decoder_reshaped = jnp.moveaxis(output_vqgan_decoder, (2, 1), (3, 2))
-
-        rng, subrng = jax.random.split(rng)
-        imgs_stacked, metrics = random_resized_crop(
-            output_vqgan_decoder_reshaped, subrng, shape=(cut_size, cut_size), n_subimg=n_subimg
-        )
-        image_embeds = vqgan_get_image_features_fn(pixel_values=imgs_stacked)
-
-        # normalized features
-        image_embeds = image_embeds / jnp.linalg.norm(image_embeds, axis=-1, keepdims=True)
-
-        # compute distance
-        dists = jax.vmap(speric_distance, in_axes=0)(image_embeds)
-
-        loss = dists.mean()
-        return loss, (output_vqgan_decoder, metrics)
-
-    rng, subrng = jax.random.split(rng)
-    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (loss, (output_vqgan_decoder, metrics)), grad = grad_fn(state.params, subrng)
-
-    new_state = state.apply_gradients(grads=grad)
-
-    metrics.update({
-        "loss": loss, 
-        "step": state.step, 
-        "image": output_vqgan_decoder
-    })
-
-    return new_state, metrics
 
 
 
@@ -497,6 +462,43 @@ if __name__ == "__main__":
     vqgan_get_image_features_fn = clip_model.get_image_features
     clip_decode_fn = vqgan_model.decode
     clip_quantize_fn = straight_through_quantize
+
+    @jax.jit
+    def train_step(rng, state, text_embeds, n_subimg):
+        def loss_fn(params, rng):
+            z_latent_q = clip_quantize_fn(params)
+            output_vqgan_decoder = clip_with_grad((clip_decode_fn(z_latent_q) + 1) / 2)  # deterministic ??
+
+            output_vqgan_decoder_reshaped = jnp.moveaxis(output_vqgan_decoder, (2, 1), (3, 2))
+
+            rng, subrng = jax.random.split(rng)
+            imgs_stacked, metrics = random_resized_crop(
+                output_vqgan_decoder_reshaped, subrng, shape=(cut_size, cut_size), n_subimg=n_subimg
+            )
+            image_embeds = vqgan_get_image_features_fn(pixel_values=imgs_stacked)
+
+            # normalized features
+            image_embeds = image_embeds / jnp.linalg.norm(image_embeds, axis=-1, keepdims=True)
+
+            # compute distance
+            dists = jax.vmap(speric_distance, in_axes=0)(image_embeds)
+
+            loss = dists.mean()
+            return loss, (output_vqgan_decoder, metrics)
+
+        rng, subrng = jax.random.split(rng)
+        grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+        (loss, (output_vqgan_decoder, metrics)), grad = grad_fn(state.params, subrng)
+
+        new_state = state.apply_gradients(grads=grad)
+
+        metrics.update({
+            "loss": loss, 
+            "step": state.step, 
+            "image": output_vqgan_decoder
+        })
+
+        return new_state, metrics
 
     compt = 0
     stop_training = False
