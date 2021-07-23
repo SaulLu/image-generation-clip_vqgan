@@ -475,7 +475,7 @@ if __name__ == "__main__":
 
             rng, subrng = jax.random.split(rng)
 
-            def random_resized_crop_new(img, rng, shape, n_subimg):
+            def random_resized_crop_new(img):
                 cutouts = img[:, :, :cut_size, :cut_size]
                 metrics = {}
                 return cutouts, metrics
