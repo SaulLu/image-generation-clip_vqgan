@@ -206,8 +206,6 @@ def train_step(rng, state, text_embeds, n_subimg, vqgan_get_image_features_fn, c
         imgs_stacked, metrics = random_resized_crop(
             output_vqgan_decoder_reshaped, subrng, shape=(cut_size, cut_size), n_subimg=n_subimg
         )
-        print(imgs_stacked.shape)
-
         image_embeds = vqgan_get_image_features_fn(pixel_values=imgs_stacked)
 
         # normalized features
