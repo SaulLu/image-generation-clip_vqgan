@@ -190,9 +190,8 @@ def random_resized_crop(img, rng, shape, n_subimg):
     cutouts = jnp.concatenate(cutouts, axis=0)
     return cutouts, metrics
 
-def speric_distance(embed_img, embed_txt):
-    print(embed_img.shape, embed_txt.shape)
-    dist = jnp.add(embed_img, -embed_txt)
+def speric_distance(embed_img):
+    dist = jnp.add(embed_img, -text_embeds)
     dist = jax.numpy.linalg.norm(dist, ord=2, axis=0)
     return jnp.arcsin(dist / 2) ** 2 * 2
 
@@ -215,8 +214,7 @@ def train_step(rng, state, text_embeds, n_subimg, vqgan_get_image_features_fn, c
         image_embeds = image_embeds / jnp.linalg.norm(image_embeds, axis=-1, keepdims=True)
 
         # compute distance
-        print(image_embeds.shape, text_embeds.shape)
-        dists = jax.vmap(jax.vmap(speric_distance, in_axes=0), in_axes=0)(image_embeds,text_embeds)
+        dists = jax.vmap(speric_distance, in_axes=0)(image_embeds)
 
         loss = dists.mean()
         return loss, (output_vqgan_decoder, metrics)
