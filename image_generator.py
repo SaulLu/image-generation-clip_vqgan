@@ -463,6 +463,7 @@ if __name__ == "__main__":
     clip_decode_fn = vqgan_model.decode
     clip_quantize_fn = straight_through_quantize
 
+    @jax.jit
     def train_step(rng, state, text_embeds, n_subimg):
         def loss_fn(params, rng):
             z_latent_q = clip_quantize_fn(params)
