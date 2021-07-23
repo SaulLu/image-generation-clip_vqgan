@@ -192,9 +192,10 @@ def random_resized_crop(img, rng, shape, n_subimg):
 
 def speric_distance(embed_img):
     dist = jnp.add(embed_img, -text_embeds)
-    dist = jax.numpy.linalg.norm(dist, ord=2, axis=0)
+    dist = jax.numpy.linalg.norm(dist, ord=2, axis=-1)
     return jnp.arcsin(dist / 2) ** 2 * 2
 
+@jax.jit
 def train_step(rng, state, text_embeds, n_subimg, vqgan_get_image_features_fn, clip_decode_fn, clip_quantize_fn):
     def loss_fn(params, rng):
         z_latent_q = clip_quantize_fn(params)
