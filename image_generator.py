@@ -475,13 +475,13 @@ if __name__ == "__main__":
 
             rng, subrng = jax.random.split(rng)
 
-            def random_resized_crop_new(img):
+            def random_resized_crop_new(img, rng, shape, n_subimg):
                 cutouts = img[:, :, :cut_size, :cut_size]
                 metrics = {}
                 return cutouts, metrics
 
-            imgs_stacked, metrics = random_resized_crop(
-                output_vqgan_decoder_reshaped
+            imgs_stacked, metrics = random_resized_crop_new(
+                output_vqgan_decoder_reshaped,
             )
             image_embeds = vqgan_get_image_features_fn(pixel_values=imgs_stacked)
 
