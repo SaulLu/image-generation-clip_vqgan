@@ -275,7 +275,7 @@ args = argparse.Namespace(
     specificity="all",
 )
 
-wandb.init(project="test-clip-pytorch", config=args)
+wandb.init(project="vqgan-clip", config=args, tags=["torch"])
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
