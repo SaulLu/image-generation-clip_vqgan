@@ -182,7 +182,7 @@ def random_resized_crop(img, rng, shape, n_subimg):
     metrics = {}
     cutouts = []
 
-    for i in jnp.arange(n_subimg):
+    for i in range(n_subimg):
         rng, subrng = jax.random.split(rng)
         cutout = resized_and_crop(img, subrng, final_shape, max_size, min_size, sideX, sideY)
         cutouts.append(cutout)
