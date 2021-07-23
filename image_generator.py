@@ -52,6 +52,7 @@ from transformers import (
 )
 from vqgan_jax.modeling_flax_vqgan import VQModel
 
+
 class TrainState(struct.PyTreeNode):
     """Simple train state for the common case with a single Optax optimizer.
 
@@ -146,6 +147,7 @@ def clip_with_grad_bwd(x, y_bar):
 
 clip_with_grad.defvjp(clip_with_grad_fwd, clip_with_grad_bwd)
 
+
 def tmp_log_cutout(cutout):
     # todo
     # tmp show cutouts
@@ -153,10 +155,11 @@ def tmp_log_cutout(cutout):
     image = Image.fromarray(tmp_img)
     metrics[f"cutout {j}"] = wandb.Image(image)
 
+
 def resample(input, size, align_corners=True):
     return jax.image.resize(input, size, method="bicubic")
 
-@jax.partial(jax.jit, static_argnames=("max_size", "min_size", "sideX", "sideY"))
+
 def resized_and_crop(img, rng, final_shape, max_size, min_size, sideX, sideY):
     rng, subrng = jax.random.split(rng)
     size = jax.random.randint(subrng, shape=(1,), minval=min_size, maxval=max_size).item()
@@ -171,7 +174,7 @@ def resized_and_crop(img, rng, final_shape, max_size, min_size, sideX, sideY):
     # resize
     return resample(cutout, final_shape)
 
-@jax.partial(jax.jit, static_argnames=("shape","n_subimg"))
+
 def random_resized_crop(img, rng, shape, n_subimg):
     sideY, sideX = img.shape[2:4]
     max_size = min(sideX, sideY)
@@ -188,17 +191,15 @@ def random_resized_crop(img, rng, shape, n_subimg):
         rng, subrng = jax.random.split(rng)
         cutout = resized_and_crop(img, subrng, final_shape, max_size, min_size, sideX, sideY)
         cutouts.append(cutout)
-    
+
     cutouts = jnp.concatenate(cutouts, axis=0)
     return cutouts, metrics
+
 
 def speric_distance(embed_img):
     dist = jnp.add(embed_img, -text_embeds)
     dist = jax.numpy.linalg.norm(dist, ord=2, axis=-1)
     return jnp.arcsin(dist / 2) ** 2 * 2
-
-
-
 
 
 @dataclass
@@ -465,7 +466,6 @@ if __name__ == "__main__":
     clip_decode_fn = vqgan_model.decode
     clip_quantize_fn = straight_through_quantize
 
-    @jax.jit
     def train_step(rng, state, text_embeds, n_subimg):
         def loss_fn(params, rng):
             z_latent_q = clip_quantize_fn(params)
@@ -474,8 +474,14 @@ if __name__ == "__main__":
             output_vqgan_decoder_reshaped = jnp.moveaxis(output_vqgan_decoder, (2, 1), (3, 2))
 
             rng, subrng = jax.random.split(rng)
+
+            def random_resized_crop_new(img):
+                cutouts = img[:, :, :cut_size, :cut_size]
+                metrics = {}
+                return cutouts, metrics
+
             imgs_stacked, metrics = random_resized_crop(
-                output_vqgan_decoder_reshaped, subrng, shape=(cut_size, cut_size), n_subimg=n_subimg
+                output_vqgan_decoder_reshaped
             )
             image_embeds = vqgan_get_image_features_fn(pixel_values=imgs_stacked)
 
@@ -494,11 +500,7 @@ if __name__ == "__main__":
 
         new_state = state.apply_gradients(grads=grad)
 
-        metrics.update({
-            "loss": loss, 
-            "step": state.step, 
-            "image": output_vqgan_decoder
-        })
+        metrics.update({"loss": loss, "step": state.step, "image": output_vqgan_decoder})
 
         return new_state, metrics
 
@@ -513,15 +515,14 @@ if __name__ == "__main__":
 
             rng, subrng = jax.random.split(rng)
             state, train_metric = train_step(
-                    rng=subrng, 
-                    state=state, 
-                    text_embeds=text_embeds, 
-                    n_subimg=training_args.cut_num,
-                )
+                rng=subrng,
+                state=state,
+                text_embeds=text_embeds,
+                n_subimg=training_args.cut_num,
+            )
 
             train_time_step = time.time() - train_start
             train_time += train_time_step
-            
 
             # trick, not used
             # state.replace(params= jnp.clip(state.params, a_min=z_min, a_max=z_max))
@@ -529,7 +530,9 @@ if __name__ == "__main__":
             # Save metrics
             if jax.process_index() == 0:
                 train_metric.update({"time": train_time, "train_time_step": train_time_step})
-                train_metric["image"] = wandb.Image(Image.fromarray(np.asarray((train_metric["image"][0] * 255).astype(np.uint8))))
+                train_metric["image"] = wandb.Image(
+                    Image.fromarray(np.asarray((train_metric["image"][0] * 255).astype(np.uint8)))
+                )
                 train_metric["loss"] = np.asarray(train_metric["loss"])
                 wandb.log(train_metric)
             if training_args.max_steps > 0 and compt > training_args.max_steps:
