@@ -514,9 +514,6 @@ if __name__ == "__main__":
                     state=state, 
                     text_embeds=text_embeds, 
                     n_subimg=training_args.cut_num,
-                    vqgan_get_image_features_fn=vqgan_get_image_features_fn, 
-                    clip_decode_fn=clip_decode_fn, 
-                    clip_quantize_fn=clip_quantize_fn
                 )
 
             train_time_step = time.time() - train_start
