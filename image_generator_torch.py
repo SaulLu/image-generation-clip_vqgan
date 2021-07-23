@@ -203,6 +203,16 @@ def download_img(img_url):
     except:
         return
 
+textos = "a fantasy world"
+ancho = 480
+alto = 480
+modelo = "vqgan_imagenet_f16_1024"
+intervalo_imagenes = 1
+imagen_inicial = None
+imagenes_objetivo = None
+seed = -1
+max_iteraciones = -1
+input_images = ""
 
 nombres_modelos = {
     "vqgan_imagenet_f16_16384": "ImageNet 16384",
@@ -245,16 +255,7 @@ textos = [frase.strip() for frase in textos.split("|")]
 if textos == [""]:
     textos = []
 
-textos = "a fantasy world"
-ancho = 480
-alto = 480
-modelo = "vqgan_imagenet_f16_1024"
-intervalo_imagenes = 1
-imagen_inicial = None
-imagenes_objetivo = None
-seed = -1
-max_iteraciones = -1
-input_images = ""
+
 
 args = argparse.Namespace(
     prompts=textos,
