@@ -171,7 +171,7 @@ def resized_and_crop(img, rng, final_shape, max_size, min_size, sideX, sideY):
     # resize
     return resample(cutout, final_shape)
 
-@jax.partial(jax.jit, static_argnames="n_subimg")
+@jax.partial(jax.jit, static_argnames=("shape","n_subimg"))
 def random_resized_crop(img, rng, shape, n_subimg):
     sideY, sideX = img.shape[2:4]
     max_size = min(sideX, sideY)
