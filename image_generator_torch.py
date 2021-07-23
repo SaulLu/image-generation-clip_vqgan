@@ -212,7 +212,7 @@ intervalo_imagenes = 1
 imagen_inicial = None
 imagenes_objetivo = None
 seed = -1
-max_iteraciones = -1
+max_iteraciones = 1000
 input_images = ""
 
 nombres_modelos = {
