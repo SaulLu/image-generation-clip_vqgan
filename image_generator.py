@@ -156,7 +156,6 @@ def tmp_log_cutout(cutout):
 def resample(input, size, align_corners=True):
     return jax.image.resize(input, size, method="bicubic")
 
-@jax.partial(jax.jit, static_argnames=("max_size", "min_size", "sideX", "sideY"))
 def resized_and_crop(img, rng, final_shape, max_size, min_size, sideX, sideY):
     rng, subrng = jax.random.split(rng)
     size = jax.random.randint(subrng, shape=(1,), minval=min_size, maxval=max_size).item()
@@ -171,14 +170,13 @@ def resized_and_crop(img, rng, final_shape, max_size, min_size, sideX, sideY):
     # resize
     return resample(cutout, final_shape)
 
-@jax.partial(jax.jit, static_argnames=("shape","n_subimg"))
 def random_resized_crop(img, rng, shape, n_subimg):
     sideY, sideX = img.shape[2:4]
     max_size = min(sideX, sideY)
     min_size = min(sideX, sideY, shape[0])
 
     final_shape = img.shape
-    final_shape = jax.ops.index_update(final_shape, jax.ops.index[-2], shape[0])
+    final_shape = tax.ops.index_update(final_shape, jax.ops.index[-2], shape[0])
     final_shape = jax.ops.index_update(final_shape, jax.ops.index[-1], shape[1])
 
     metrics = {}
@@ -465,7 +463,6 @@ if __name__ == "__main__":
     clip_decode_fn = vqgan_model.decode
     clip_quantize_fn = straight_through_quantize
 
-    @jax.jit
     def train_step(rng, state, text_embeds, n_subimg):
         def loss_fn(params, rng):
             z_latent_q = clip_quantize_fn(params)
