@@ -33,7 +33,7 @@ import json
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 do_lanczos = False
-do_augs = False
+do_augs = True
 
 def sinc(x):
     return torch.where(x != 0, torch.sin(math.pi * x) / (math.pi * x), x.new_ones([]))
