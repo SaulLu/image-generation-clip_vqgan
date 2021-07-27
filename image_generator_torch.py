@@ -32,7 +32,7 @@ from stegano import lsb
 import json
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-do_lanczos = True
+do_lanczos = False
 do_augs = True
 
 def sinc(x):
