@@ -52,153 +52,6 @@ from transformers import (
 )
 from vqgan_jax.modeling_flax_vqgan import VQModel
 
-class TrainState(struct.PyTreeNode):
-    """Simple train state for the common case with a single Optax optimizer.
-
-    Synopsis::
-
-        state = TrainState.create(
-            apply_fn=model.apply,
-            params=variables['params'],
-            tx=tx)
-        grad_fn = jax.grad(make_loss_fn(state.apply_fn))
-        for batch in data:
-            grads = grad_fn(state.params, batch)
-            state = state.apply_gradients(grads=grads)
-
-    Note that you can easily extend this dataclass by subclassing it for storing
-    additional data (e.g. additional variable collections).
-
-    For more exotic usecases (e.g. multiple optimizers) it's probably best to
-    fork the class and modify it.
-
-    Args:
-        step: Counter starts at 0 and is incremented by every call to
-        `.apply_gradients()`.
-        apply_fn: Usually set to `model.apply()`. Kept in this dataclass for
-        convenience to have a shorter params list for the `train_step()` function
-        in your training loop.
-        params: The parameters to be updated by `tx` and used by `apply_fn`.
-        tx: An Optax gradient transformation.
-        opt_state: The state for `tx`.
-    """
-
-    step: int
-    params: core.FrozenDict[str, Any]
-    tx: optax.GradientTransformation = struct.field(pytree_node=False)
-    opt_state: optax.OptState
-
-    def apply_gradients(self, *, grads, **kwargs):
-        """Updates `step`, `params`, `opt_state` and `**kwargs` in return value.
-
-        Note that internally this function calls `.tx.update()` followed by a call
-        to `optax.apply_updates()` to update `params` and `opt_state`.
-
-        Args:
-        grads: Gradients that have the same pytree structure as `.params`.
-        **kwargs: Additional dataclass attributes that should be `.replace()`-ed.
-
-        Returns:
-        An updated instance of `self` with `step` incremented by one, `params`
-        and `opt_state` updated by applying `grads`, and additional attributes
-        replaced as specified by `kwargs`.
-        """
-        updates, new_opt_state = self.tx.update(grads, self.opt_state, self.params)
-        new_params = optax.apply_updates(self.params, updates)
-        return self.replace(
-            step=self.step + 1,
-            params=new_params,
-            opt_state=new_opt_state,
-            **kwargs,
-        )
-
-    @classmethod
-    def create(cls, *, params, tx, **kwargs):
-        """Creates a new instance with `step=0` and initialized `opt_state`."""
-        opt_state = tx.init(params)
-        return cls(
-            step=0,
-            params=params,
-            tx=tx,
-            opt_state=opt_state,
-            **kwargs,
-        )
-
-
-# f :: a -> b
-@custom_vjp
-def clip_with_grad(x):
-    return jnp.clip(x, a_min=0, a_max=1)
-
-
-# f_fwd :: a -> (b, c)
-def clip_with_grad_fwd(x):
-    return clip_with_grad(x), x
-
-
-# f_bwd :: (c, CT b) -> CT a
-def clip_with_grad_bwd(x, y_bar):
-    ans = clip_with_grad(x)
-    boolean = jnp.heaviside(y_bar * (x - ans), 1)
-    ans_dot = y_bar * boolean
-    return (ans_dot,)
-
-
-clip_with_grad.defvjp(clip_with_grad_fwd, clip_with_grad_bwd)
-
-def tmp_log_cutout(cutout):
-    # todo
-    # tmp show cutouts
-    tmp_img = np.moveaxis(np.asarray((cutout[0] * 255).astype(np.uint8)), 0, -1)
-    image = Image.fromarray(tmp_img)
-    metrics[f"cutout {j}"] = wandb.Image(image)
-
-def resample(input, size, align_corners=True):
-    return jax.image.resize(input, size, method="bicubic")
-
-def resized_and_crop(img, rng, final_shape, max_size, min_size, sideX, sideY):
-    rng, subrng = jax.random.split(rng)
-    size = jax.random.randint(subrng, shape=(1,), minval=min_size, maxval=max_size).item()
-
-    rng, subrng = jax.random.split(rng)
-    offsetx = jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideX - size + 1).item()
-
-    rng, subrng = jax.random.split(rng)
-    offsety = jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideY - size + 1).item()
-    cutout = img[:, :, offsetx : offsetx + size, offsety : offsety + size]
-
-    # resize
-    return resample(cutout, final_shape)
-
-def random_resized_crop(img, rng, shape, n_subimg):
-    sideY, sideX = img.shape[2:4]
-    max_size = min(sideX, sideY)
-    min_size = min(sideX, sideY, shape[0])
-
-    final_shape = img.shape
-    final_shape = jax.ops.index_update(final_shape, jax.ops.index[-2], shape[0])
-    final_shape = jax.ops.index_update(final_shape, jax.ops.index[-1], shape[1])
-
-    metrics = {}
-    cutouts = []
-
-    for i in range(n_subimg):
-        rng, subrng = jax.random.split(rng)
-        cutout = resized_and_crop(img, subrng, final_shape, max_size, min_size, sideX, sideY)
-        cutouts.append(cutout)
-    
-    cutouts = jnp.concatenate(cutouts, axis=0)
-    return cutouts, metrics
-
-def speric_distance(embed_img):
-    dist = jnp.add(embed_img, -text_embeds)
-    dist = jax.numpy.linalg.norm(dist, ord=2, axis=-1)
-    return jnp.arcsin(dist / 2) ** 2 * 2
-
-
-
-
-
 @dataclass
 class ModelArguments:
     """
@@ -307,6 +160,143 @@ class TrainingArguments:
         },
     )
 
+class TrainState(struct.PyTreeNode):
+    """Simple train state for the common case with a single Optax optimizer.
+
+    Synopsis::
+
+        state = TrainState.create(
+            apply_fn=model.apply,
+            params=variables['params'],
+            tx=tx)
+        grad_fn = jax.grad(make_loss_fn(state.apply_fn))
+        for batch in data:
+            grads = grad_fn(state.params, batch)
+            state = state.apply_gradients(grads=grads)
+
+    Note that you can easily extend this dataclass by subclassing it for storing
+    additional data (e.g. additional variable collections).
+
+    For more exotic usecases (e.g. multiple optimizers) it's probably best to
+    fork the class and modify it.
+
+    Args:
+        step: Counter starts at 0 and is incremented by every call to
+        `.apply_gradients()`.
+        apply_fn: Usually set to `model.apply()`. Kept in this dataclass for
+        convenience to have a shorter params list for the `train_step()` function
+        in your training loop.
+        params: The parameters to be updated by `tx` and used by `apply_fn`.
+        tx: An Optax gradient transformation.
+        opt_state: The state for `tx`.
+    """
+
+    step: int
+    params: core.FrozenDict[str, Any]
+    tx: optax.GradientTransformation = struct.field(pytree_node=False)
+    opt_state: optax.OptState
+
+    def apply_gradients(self, *, grads, **kwargs):
+        """Updates `step`, `params`, `opt_state` and `**kwargs` in return value.
+
+        Note that internally this function calls `.tx.update()` followed by a call
+        to `optax.apply_updates()` to update `params` and `opt_state`.
+
+        Args:
+        grads: Gradients that have the same pytree structure as `.params`.
+        **kwargs: Additional dataclass attributes that should be `.replace()`-ed.
+
+        Returns:
+        An updated instance of `self` with `step` incremented by one, `params`
+        and `opt_state` updated by applying `grads`, and additional attributes
+        replaced as specified by `kwargs`.
+        """
+        updates, new_opt_state = self.tx.update(grads, self.opt_state, self.params)
+        new_params = optax.apply_updates(self.params, updates)
+        return self.replace(
+            step=self.step + 1,
+            params=new_params,
+            opt_state=new_opt_state,
+            **kwargs,
+        )
+
+    @classmethod
+    def create(cls, *, params, tx, **kwargs):
+        """Creates a new instance with `step=0` and initialized `opt_state`."""
+        opt_state = tx.init(params)
+        return cls(
+            step=0,
+            params=params,
+            tx=tx,
+            opt_state=opt_state,
+            **kwargs,
+        )
+
+
+# f :: a -> b
+@custom_vjp
+def clip_with_grad(x):
+    return jnp.clip(x, a_min=0, a_max=1)
+
+
+# f_fwd :: a -> (b, c)
+def clip_with_grad_fwd(x):
+    return clip_with_grad(x), x
+
+
+# f_bwd :: (c, CT b) -> CT a
+def clip_with_grad_bwd(x, y_bar):
+    ans = clip_with_grad(x)
+    boolean = jnp.heaviside(y_bar * (x - ans), 1)
+    ans_dot = y_bar * boolean
+    return (ans_dot,)
+
+
+clip_with_grad.defvjp(clip_with_grad_fwd, clip_with_grad_bwd)
+
+def resample(input, size, align_corners=True):
+    return jax.image.resize(input, size, method="bicubic")
+
+def resized_and_crop(img, rng, final_shape, max_size, min_size, sideX, sideY):
+    rng, subrng = jax.random.split(rng)
+    size = jax.random.randint(subrng, shape=(1,), minval=min_size, maxval=max_size).item()
+
+    rng, subrng = jax.random.split(rng)
+    offsetx = jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideX - size + 1).item()
+
+    rng, subrng = jax.random.split(rng)
+    offsety = jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideY - size + 1).item()
+    cutout = img[:, :, offsetx : offsetx + size, offsety : offsety + size]
+
+    # resize
+    return resample(cutout, final_shape)
+
+def random_resized_crop(img, rng, shape, n_subimg):
+    sideY, sideX = img.shape[2:4]
+    max_size = min(sideX, sideY)
+    min_size = min(sideX, sideY, shape[0])
+
+    final_shape = img.shape
+    final_shape = jax.ops.index_update(final_shape, jax.ops.index[-2], shape[0])
+    final_shape = jax.ops.index_update(final_shape, jax.ops.index[-1], shape[1])
+
+    metrics = {}
+    cutouts = []
+
+    for i in range(n_subimg):
+        rng, subrng = jax.random.split(rng)
+        cutout = resized_and_crop(img, subrng, final_shape, max_size, min_size, sideX, sideY)
+        cutouts.append(cutout)
+    
+    cutouts = jnp.concatenate(cutouts, axis=0)
+    return cutouts, metrics
+
+def speric_distance(embed_img):
+    dist = jnp.add(embed_img, -text_embeds)
+    dist = jax.numpy.linalg.norm(dist, ord=2, axis=-1)
+    return jnp.arcsin(dist / 2) ** 2 * 2
+
+
 
 if __name__ == "__main__":
     # See all possible arguments in src/transformers/training_args.py
@@ -380,8 +370,8 @@ if __name__ == "__main__":
             "This script does not train a model, you must choose an already trained CLIP model, using --clip_model_name_or_path."
         )
 
+    # Uncomment when VQ-GAN merged into transformers
     # Load VQGAN model
-    # not merged yet
     # if model_args.vqgan_config_name:
     #     vqgan_config = AutoConfig.from_pretrained(model_args.vqgan_config_name, cache_dir=model_args.cache_dir)
     # elif model_args.vqgan_model_name_or_path:
