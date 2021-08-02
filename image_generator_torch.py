@@ -34,12 +34,19 @@ import argparse
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--do_horizontal_flip", default=True)
-parser.add_argument("--do_sharpness", default=True)
-parser.add_argument("--do_affine", default=True)
-parser.add_argument("--do_perspective", default=True)
-parser.add_argument("--do_color_jitter", default=True)
-parser.add_argument("--do_lanczos", default=True)
+parser.add_argument('--no_horizontal_flip', dest='horizontal_flip', action='store_false')
+parser.set_defaults(horizontal_flip=True)
+parser.add_argument('--no_sharpness', dest='sharpness', action='store_false')
+parser.set_defaults(sharpness=True)
+parser.add_argument('--no_affine', dest='affine', action='store_false')
+parser.set_defaults(affine=True)
+parser.add_argument('--no_perspective', dest='perspective', action='store_false')
+parser.set_defaults(perspective=True)
+parser.add_argument('--no_color_jitter', dest='color_jitter', action='store_false')
+parser.set_defaults(color_jitter=True)
+parser.add_argument('--no_lanczos', dest='lanczos', action='store_false')
+parser.set_defaults(lanczos=True)
+
 args = parser.parse_args()
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -180,7 +187,7 @@ class MakeCutouts(nn.Module):
 
         self.augs = nn.Sequential(*list_augs)
         print(self.augs)
-        
+
         self.noise_fac = 0.1
 
     def forward(self, input):
