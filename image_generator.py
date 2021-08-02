@@ -274,7 +274,7 @@ def resized_and_crop(img, rng, final_shape, max_size, min_size, sideX, sideY):
 
 def random_resized_crop(img, rng, shape, n_subimg):
     sideY, sideX = img.shape[2:4]
-    max_size = min(sideX, sideY, shape[0])
+    max_size = min(sideX, sideY)
     min_size = min(sideX, sideY, shape[0])
 
     final_shape = img.shape
