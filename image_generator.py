@@ -449,14 +449,14 @@ if __name__ == "__main__":
     def straight_through_quantize(x):
         return x + jax.lax.stop_gradient(vqgan_model.quantize(x)[0] - x)
 
-    vqgan_get_image_features_fn = jax.jit(clip_model.get_image_features)
-    clip_decode_fn = jax.jit(vqgan_model.decode)
-    clip_quantize_fn = jax.jit(straight_through_quantize)
+    clip_get_image_features_fn = jax.jit(clip_model.get_image_features)
+    vqgan_decode_fn = jax.jit(vqgan_model.decode)
+    vqgan_quantize_fn = jax.jit(straight_through_quantize)
 
     def train_step(rng, state, text_embeds, n_subimg):
         def loss_fn(params, rng):
-            z_latent_q = clip_quantize_fn(params)
-            output_vqgan_decoder = clip_with_grad((clip_decode_fn(z_latent_q) + 1) / 2)  # deterministic ??
+            z_latent_q = vqgan_quantize_fn(params)
+            output_vqgan_decoder = clip_with_grad((vqgan_decode_fn(z_latent_q) + 1) / 2)  # deterministic ??
 
             output_vqgan_decoder_reshaped = jnp.moveaxis(output_vqgan_decoder, (2, 1), (3, 2))
 
@@ -464,7 +464,7 @@ if __name__ == "__main__":
             imgs_stacked, metrics = random_resized_crop(
                 output_vqgan_decoder_reshaped, subrng, shape=(cut_size, cut_size), n_subimg=n_subimg
             )
-            image_embeds = vqgan_get_image_features_fn(pixel_values=imgs_stacked)
+            image_embeds = clip_get_image_features_fn(pixel_values=imgs_stacked)
 
             # normalized features
             image_embeds = image_embeds / jnp.linalg.norm(image_embeds, axis=-1, keepdims=True)
