@@ -277,7 +277,8 @@ def random_resized_crop(img, rng, shape, n_subimg):
     min_size = min(sideX, sideY, shape[0])
 
     rng, subrng = jax.random.split(rng)
-    size = jax.random.choice(subrng, jnp.array([min_size, max_size])).item()
+    # size = jax.random.choice(subrng, jnp.array([min_size, max_size])).item()
+    size = jax.random.randint(subrng, shape=(1,), minval=min_size, maxval=max_size).item()
 
     final_shape = img.shape
     final_shape = jax.ops.index_update(final_shape, jax.ops.index[-2], shape[0])
