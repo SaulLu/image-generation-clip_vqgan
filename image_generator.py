@@ -449,7 +449,7 @@ if __name__ == "__main__":
     def straight_through_quantize(x):
         return x + jax.lax.stop_gradient(vqgan_model.quantize(x)[0] - x)
 
-    vqgan_get_image_features_fn = clip_model.get_image_features
+    vqgan_get_image_features_fn = jax.jit(clip_model.get_image_features)
     clip_decode_fn = jax.jit(vqgan_model.decode)
     clip_quantize_fn = jax.jit(straight_through_quantize)
 
