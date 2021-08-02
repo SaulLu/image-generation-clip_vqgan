@@ -45,10 +45,10 @@ args = parser.parse_args()
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 do_augs = (
     args.do_horizontal_flip
-    and args.do_sharpness
-    and args.do_affine
-    and args.do_perspective
-    and args.do_color_jitter
+    or args.do_sharpness
+    or args.do_affine
+    or args.do_perspective
+    or args.do_color_jitter
 )
 
 
@@ -179,6 +179,8 @@ class MakeCutouts(nn.Module):
             list_augs.append(K.ColorJitter(hue=0.01, saturation=0.01, p=0.7))
 
         self.augs = nn.Sequential(*list_augs)
+        print(self.augs)
+        
         self.noise_fac = 0.1
 
     def forward(self, input):
