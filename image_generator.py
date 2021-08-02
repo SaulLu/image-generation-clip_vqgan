@@ -257,10 +257,9 @@ clip_with_grad.defvjp(clip_with_grad_fwd, clip_with_grad_bwd)
 def resample(input, size, align_corners=True):
     return jax.image.resize(input, size, method="bicubic")
 
-def resized_and_crop(img, rng, final_shape, max_size, min_size, sideX, sideY):
-    rng, subrng = jax.random.split(rng)
+def resized_and_crop(img, rng, final_shape, size, sideX, sideY):
     # size = jax.random.randint(subrng, shape=(1,), minval=min_size, maxval=max_size).item()
-    size = jax.random.choice(subrng, jnp.array([min_size, max_size])).item()
+    
 
     rng, subrng = jax.random.split(rng)
     offsetx = jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideX - size + 1).item()
@@ -277,6 +276,9 @@ def random_resized_crop(img, rng, shape, n_subimg):
     max_size = min(sideX, sideY)
     min_size = min(sideX, sideY, shape[0])
 
+    rng, subrng = jax.random.split(rng)
+    size = jax.random.choice(subrng, jnp.array([min_size, max_size])).item()
+
     final_shape = img.shape
     final_shape = jax.ops.index_update(final_shape, jax.ops.index[-2], shape[0])
     final_shape = jax.ops.index_update(final_shape, jax.ops.index[-1], shape[1])
@@ -286,7 +288,7 @@ def random_resized_crop(img, rng, shape, n_subimg):
 
     for i in range(n_subimg):
         rng, subrng = jax.random.split(rng)
-        cutout = resized_and_crop(img, subrng, final_shape, max_size, min_size, sideX, sideY)
+        cutout = resized_and_crop(img, subrng, final_shape, size, sideX, sideY)
         cutouts.append(cutout)
     
     cutouts = jnp.concatenate(cutouts, axis=0)
