@@ -30,10 +30,27 @@ from libxmp import *  # metadatos
 import libxmp  # metadatos
 from stegano import lsb
 import json
+import argparse
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument("--do_horizontal_flip", default=True)
+parser.add_argument("--do_sharpness", default=True)
+parser.add_argument("--do_affine", default=True)
+parser.add_argument("--do_perspective", default=True)
+parser.add_argument("--do_color_jitter", default=True)
+parser.add_argument("--do_lanczos", default=True)
+args = parser.parse_args()
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-do_lanczos = False
-do_augs = False
+do_augs = (
+    args.do_horizontal_flip
+    and args.do_sharpness
+    and args.do_affine
+    and args.do_perspective
+    and args.do_color_jitter
+)
+
 
 def sinc(x):
     return torch.where(x != 0, torch.sin(math.pi * x) / (math.pi * x), x.new_ones([]))
@@ -61,7 +78,7 @@ def resample(input, size, align_corners=True):
 
     input = input.view([n * c, 1, h, w])
 
-    if do_lanczos:
+    if args.do_lanczos:
         if dh < h:
             kernel_h = lanczos(ramp(dh / h, 2), 2).to(input.device, input.dtype)
             pad_h = (kernel_h.shape[0] - 1) // 2
@@ -143,14 +160,25 @@ class MakeCutouts(nn.Module):
         self.cut_size = cut_size
         self.cutn = cutn
         self.cut_pow = cut_pow
-        self.augs = nn.Sequential(
-            K.RandomHorizontalFlip(p=0.5),
-            # K.RandomSolarize(0.01, 0.01, p=0.7),
-            K.RandomSharpness(0.3, p=0.4),
-            K.RandomAffine(degrees=30, translate=0.1, p=0.8, padding_mode="border"),
-            K.RandomPerspective(0.2, p=0.4),
-            K.ColorJitter(hue=0.01, saturation=0.01, p=0.7),
-        )
+
+        list_augs = []
+
+        if args.do_horizontal_flip:
+            list_augs.append(K.RandomHorizontalFlip(p=0.5))
+
+        if args.do_sharpness:
+            list_augs.append(K.RandomSharpness(0.3, p=0.4))
+
+        if args.do_affine:
+            list_augs.append(K.RandomAffine(degrees=30, translate=0.1, p=0.8, padding_mode="border"))
+
+        if args.do_perspective:
+            list_augs.append(K.RandomPerspective(0.2, p=0.4))
+
+        if args.do_color_jitter:
+            list_augs.append(K.ColorJitter(hue=0.01, saturation=0.01, p=0.7))
+
+        self.augs = nn.Sequential(*list_augs)
         self.noise_fac = 0.1
 
     def forward(self, input):
@@ -209,6 +237,7 @@ def download_img(img_url):
     except:
         return
 
+
 textos = "a fantasy world"
 ancho = 480
 alto = 480
@@ -262,7 +291,6 @@ if textos == [""]:
     textos = []
 
 
-
 args = argparse.Namespace(
     prompts=textos,
     image_prompts=imagenes_objetivo,
@@ -280,8 +308,13 @@ args = argparse.Namespace(
     display_freq=intervalo_imagenes,
     seed=seed,
     specificity="all",
-    do_lanczos = do_lanczos,
-    do_augs = do_augs
+    do_lanczos=args.do_lanczos,
+    do_augs=do_augs,
+    do_horizontal_flip=args.do_horizontal_flip,
+    do_sharpness=args.do_sharpness,
+    do_affine=args.do_affine,
+    do_perspective=args.do_perspective,
+    do_color_jitter=args.do_color_jitter,
 )
 
 wandb.init(project="vqgan-clip", config=args, tags=["torch"])
