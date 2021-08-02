@@ -260,7 +260,7 @@ def resample(input, size, align_corners=True):
 def resized_and_crop(img, rng, final_shape, max_size, min_size, sideX, sideY):
     rng, subrng = jax.random.split(rng)
     # size = jax.random.randint(subrng, shape=(1,), minval=min_size, maxval=max_size).item()
-    size = jax.random.choice(subrng, jnp.array(min_size, max_size)).item()
+    size = jax.random.choice(subrng, jnp.array([min_size, max_size])).item()
 
     rng, subrng = jax.random.split(rng)
     offsetx = jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideX - size + 1).item()
