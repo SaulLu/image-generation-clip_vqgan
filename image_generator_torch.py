@@ -51,11 +51,11 @@ args = parser.parse_args()
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 do_augs = (
-    args.horizontal_flip
-    or args.sharpness
-    or args.affine
-    or args.perspective
-    or args.color_jitter
+    args.do_horizontal_flip
+    or args.do_sharpness
+    or args.do_affine
+    or args.do_perspective
+    or args.do_color_jitter
 )
 
 
@@ -170,19 +170,19 @@ class MakeCutouts(nn.Module):
 
         list_augs = []
 
-        if args.horizontal_flip:
+        if args.do_horizontal_flip:
             list_augs.append(K.RandomHorizontalFlip(p=0.5))
 
-        if args.sharpness:
+        if args.do_sharpness:
             list_augs.append(K.RandomSharpness(0.3, p=0.4))
 
-        if args.affine:
+        if args.do_affine:
             list_augs.append(K.RandomAffine(degrees=30, translate=0.1, p=0.8, padding_mode="border"))
 
-        if args.perspective:
+        if args.do_perspective:
             list_augs.append(K.RandomPerspective(0.2, p=0.4))
 
-        if args.color_jitter:
+        if args.do_color_jitter:
             list_augs.append(K.ColorJitter(hue=0.01, saturation=0.01, p=0.7))
 
         self.augs = nn.Sequential(*list_augs)
