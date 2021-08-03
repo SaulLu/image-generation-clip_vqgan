@@ -1,3 +1,6 @@
+"""
+Original code from https://colab.research.google.com/drive/1go6YwMFe5MX6XM9tv-cnQiSTU50N9EeT#scrollTo=mFo5vz0UYBrF
+"""
 # @title Carga de bibliotecas y definiciones
 
 import argparse
@@ -46,6 +49,7 @@ parser.add_argument('--no_color_jitter', dest='do_color_jitter', action='store_f
 parser.set_defaults(do_color_jitter=True)
 parser.add_argument('--no_lanczos', dest='do_lanczos', action='store_false')
 parser.set_defaults(do_lanczos=True)
+parser.add_argument("textos", default="a fantasy world")
 
 args = parser.parse_args()
 
@@ -247,7 +251,7 @@ def download_img(img_url):
         return
 
 
-textos = "a fantasy world"
+textos = args.textos
 ancho = 480
 alto = 480
 modelo = "vqgan_imagenet_f16_1024"
