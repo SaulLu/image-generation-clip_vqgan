@@ -49,7 +49,7 @@ parser.add_argument('--no_color_jitter', dest='do_color_jitter', action='store_f
 parser.set_defaults(do_color_jitter=True)
 parser.add_argument('--no_lanczos', dest='do_lanczos', action='store_false')
 parser.set_defaults(do_lanczos=True)
-parser.add_argument("textos", default="a fantasy world")
+parser.add_argument("--textos", default="a fantasy world")
 
 args = parser.parse_args()
 
