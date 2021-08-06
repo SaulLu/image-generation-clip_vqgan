@@ -334,6 +334,7 @@ args = argparse.Namespace(
     do_affine=args.do_affine,
     do_perspective=args.do_perspective,
     do_color_jitter=args.do_color_jitter,
+    fixe_crop_size=args.fixe_crop_size
 )
 
 wandb.init(project="vqgan-clip", config=args, tags=["torch"])
