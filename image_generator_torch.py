@@ -52,6 +52,7 @@ parser.set_defaults(do_lanczos=True)
 parser.add_argument("--textos", default="a fantasy world")
 parser.add_argument('--fixe_crop_size', dest='fixe_crop_size', action='store_true')
 parser.set_defaults(fixe_crop_size=False)
+parser.add_argument("--cutn", default=5)
 
 args = parser.parse_args()
 
@@ -322,7 +323,7 @@ args = argparse.Namespace(
     vqgan_config=f"{modelo}.yaml",
     vqgan_checkpoint=f"{modelo}.ckpt",
     step_size=0.1,
-    cutn=5,
+    cutn=args.cutn,
     cut_pow=1.0,
     display_freq=intervalo_imagenes,
     seed=seed,
