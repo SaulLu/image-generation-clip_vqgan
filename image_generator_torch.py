@@ -51,7 +51,7 @@ parser.add_argument('--no_lanczos', dest='do_lanczos', action='store_false')
 parser.set_defaults(do_lanczos=True)
 parser.add_argument("--textos", default="a fantasy world")
 parser.add_argument('--fixe_crop_size', dest='fixe_crop_size', action='store_true')
-parser.set_defaults(fixe_crop_size=True)
+parser.set_defaults(fixe_crop_size=False)
 
 args = parser.parse_args()
 
