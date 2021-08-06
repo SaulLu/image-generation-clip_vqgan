@@ -50,6 +50,8 @@ parser.set_defaults(do_color_jitter=True)
 parser.add_argument('--no_lanczos', dest='do_lanczos', action='store_false')
 parser.set_defaults(do_lanczos=True)
 parser.add_argument("--textos", default="a fantasy world")
+parser.add_argument('--fixe_crop_size', dest='fixe_crop_size', action='store_true')
+parser.set_defaults(fixe_crop_size=True)
 
 args = parser.parse_args()
 
@@ -196,7 +198,11 @@ class MakeCutouts(nn.Module):
 
     def forward(self, input):
         sideY, sideX = input.shape[2:4]
-        max_size = min(sideX, sideY)
+        if args.fixe_crop_size:
+            max_size = min(sideX, sideY, self.cut_size)
+        
+        else:
+            max_size = min(sideX, sideY)
         min_size = min(sideX, sideY, self.cut_size)
         cutouts = []
         for _ in range(self.cutn):
