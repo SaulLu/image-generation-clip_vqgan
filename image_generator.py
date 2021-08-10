@@ -494,7 +494,6 @@ if __name__ == "__main__":
             output_vqgan_decoder_reshaped = jnp.moveaxis(output_vqgan_decoder, (2, 1), (3, 2))
 
             rng, subrng = jax.random.split(rng)
-            crop_sizes = jax.random.choice(possible_crop_sizes)
             imgs_stacked, metrics = random_resized_crop(
                 output_vqgan_decoder_reshaped,
                 subrng,
@@ -532,6 +531,8 @@ if __name__ == "__main__":
             # ======================== Training ================================
             train_start = time.time()
 
+            rng, subrng = jax.random.split(rng)
+            crop_sizes = jax.random.choice(subrng, possible_crop_sizes)
             rng, subrng = jax.random.split(rng)
             state, train_metric = train_step(
                 rng=subrng,
