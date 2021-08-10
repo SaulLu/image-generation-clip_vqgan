@@ -286,19 +286,19 @@ def resized_and_crop(img, rng, final_shape, crop_sizes):
     return resample(cutout, final_shape)
 
 
-def get_crop_sizes(image_width, image_height, min_image_width_height, n_crop_sizes):
+def get_possible_crop_sizes(image_width, image_height, min_image_width_height, n_crop_sizes):
     max_size = min(image_width, image_height)
     min_size = min(image_width, image_height, min_image_width_height)
 
     all_possibilities = list(range(min_size, max_size + 1))
     if len(all_possibilities) < n_crop_sizes:
         raise ValueError(f"`n_crop_sizes` {n_crop_sizes} must be superior or equal to {len(all_possibilities)}")
-    crop_sizes = random.sample(all_possibilities, n_crop_sizes)
-    crop_sizes = [(1,3, crop_size, crop_size) for crop_size in crop_sizes]
-    return crop_sizes
+    possible_crop_sizes = random.sample(all_possibilities, n_crop_sizes)
+    # crop_sizes = [(1,3, crop_size, crop_size) for crop_size in crop_sizes]
+    return possible_crop_sizes
 
 
-def random_resized_crop(img, rng, image_width_height_clip, n_subimg, crop_sizes):
+def random_resized_crop(img, rng, image_width_height_clip, n_subimg, crop_size):
     # sideY, sideX = img.shape[2:4]
     # max_size = min(sideX, sideY)
     # min_size = min(sideX, sideY, shape[0])
@@ -313,6 +313,7 @@ def random_resized_crop(img, rng, image_width_height_clip, n_subimg, crop_sizes)
 
     metrics = {}
     cutouts = []
+    crop_size = [1,3, crop_size, crop_size]
 
     for i in range(n_subimg):
         rng, subrng = jax.random.split(rng)
@@ -484,9 +485,9 @@ if __name__ == "__main__":
     vqgan_decode_fn = jax.jit(vqgan_model.decode)
     vqgan_quantize_fn = jax.jit(straight_through_quantize)
 
-    possible_crop_sizes = get_crop_sizes(data_args.image_width, data_args.image_height, cut_size, n_crop_sizes=training_args.n_crop_sizes)
+    possible_crop_sizes = get_possible_crop_sizes(data_args.image_width, data_args.image_height, cut_size, n_crop_sizes=training_args.n_crop_sizes)
 
-    def train_step(rng, state, text_embeds, n_subimg, crop_sizes):
+    def train_step(rng, state, text_embeds, n_subimg, crop_size):
         def loss_fn(params, rng):
             z_latent_q = vqgan_quantize_fn(params)
             output_vqgan_decoder = clip_with_grad((vqgan_decode_fn(z_latent_q) + 1) / 2)  # deterministic ??
@@ -499,7 +500,7 @@ if __name__ == "__main__":
                 subrng,
                 image_width_height_clip=cut_size,
                 n_subimg=n_subimg,
-                crop_sizes=crop_sizes,
+                crop_size=crop_size,
             )
             image_embeds = clip_get_image_features_fn(pixel_values=imgs_stacked)
 
@@ -532,14 +533,14 @@ if __name__ == "__main__":
             train_start = time.time()
 
             rng, subrng = jax.random.split(rng)
-            crop_sizes = jax.random.choice(subrng, possible_crop_sizes)
+            crop_size = jax.random.choice(subrng, possible_crop_sizes)
             rng, subrng = jax.random.split(rng)
             state, train_metric = train_step(
                 rng=subrng,
                 state=state,
                 text_embeds=text_embeds,
                 n_subimg=training_args.cut_num,
-                crop_sizes=crop_sizes
+                crop_size=crop_size
             )
 
             train_time_step = time.time() - train_start
