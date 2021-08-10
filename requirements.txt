@@ -7,5 +7,5 @@ wandb==0.11.2
 flax==0.3.4
 transformers==4.9.1
 torchvision==0.10.0+cu102
-dataclasses==0.8
+dataclasses
 Pillow==8.3.1
