@@ -536,6 +536,7 @@ if __name__ == "__main__":
                 state=state,
                 text_embeds=text_embeds,
                 n_subimg=training_args.cut_num,
+                crop_sizes=crop_sizes
             )
 
             train_time_step = time.time() - train_start
