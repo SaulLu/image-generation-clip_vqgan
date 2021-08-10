@@ -18,16 +18,17 @@ Script to generate an image from a text prompt
 
 Code inspired initially by a notebook made by Katherine Crowson 
 """
-
-import os
-import logging
-import sys
 import argparse
+import logging
+import os
+import random
+import sys
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Optional, List
+from typing import Any, Callable, List, Optional
 
+import dm_pix as pix
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -38,19 +39,12 @@ from flax.training.common_utils import get_metrics
 from jax import custom_vjp
 from PIL import Image
 from torchvision.transforms import functional as TF
-from transformers import (
-    set_seed,
-    AutoTokenizer,
-    AutoConfig,
-    CLIPFeatureExtractor,
-    CLIPProcessor,
-    CLIPTokenizer,
-    CLIPTokenizerFast,
-    HfArgumentParser,
-    FlaxCLIPModel,
-    is_tensorboard_available,
-)
+from transformers import (AutoConfig, AutoTokenizer, CLIPFeatureExtractor,
+                          CLIPProcessor, CLIPTokenizer, CLIPTokenizerFast,
+                          FlaxCLIPModel, HfArgumentParser,
+                          is_tensorboard_available, set_seed)
 from vqgan_jax.modeling_flax_vqgan import VQModel
+
 
 @dataclass
 class ModelArguments:
@@ -160,6 +154,7 @@ class TrainingArguments:
         },
     )
 
+
 class TrainState(struct.PyTreeNode):
     """Simple train state for the common case with a single Optax optimizer.
 
@@ -254,52 +249,66 @@ def clip_with_grad_bwd(x, y_bar):
 
 clip_with_grad.defvjp(clip_with_grad_fwd, clip_with_grad_bwd)
 
+
 def resample(input, size, align_corners=True):
     return jax.image.resize(input, size, method="bicubic")
 
-def resized_and_crop(img, rng, final_shape, size, sideX, sideY):
+
+def resized_and_crop(img, rng, final_shape, crop_sizes):
     # size = jax.random.randint(subrng, shape=(1,), minval=min_size, maxval=max_size).item()
-    
-
     rng, subrng = jax.random.split(rng)
-    offsetx = jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideX - size + 1).item()
+    cutout = pix.random_crop(key=subrng, image=img, crop_sizes=crop_sizes)
 
-    rng, subrng = jax.random.split(rng)
-    offsety = jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideY - size + 1).item()
-    cutout = img[:, :, offsetx : offsetx + size, offsety : offsety + size]
+    # offsetx = jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideX - size + 1).item()
+
+    # rng, subrng = jax.random.split(rng)
+    # offsety = jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideY - size + 1).item()
+    # cutout = img[:, :, offsetx : offsetx + size, offsety : offsety + size]
 
     # resize
     return resample(cutout, final_shape)
 
-def random_resized_crop(img, rng, shape, n_subimg):
-    sideY, sideX = img.shape[2:4]
-    max_size = min(sideX, sideY)
-    min_size = min(sideX, sideY, shape[0])
 
-    rng, subrng = jax.random.split(rng)
-    # size = jax.random.choice(subrng, jnp.array([min_size, max_size])).item()
-    size = jax.random.randint(subrng, shape=(1,), minval=min_size, maxval=max_size).item()
+def get_crop_sizes(image_width, image_height, min_image_width_height, n_crop_sizes):
+    max_size = min(image_width, image_height)
+    min_size = min(image_width, image_height, min_image_width_height)
+
+    all_possibilities = list(range(min_size, max_size + 1))
+    if len(all_possibilities) < n_crop_sizes:
+        raise ValueError(f"`n_crop_sizes` {n_crop_sizes} must be superior or equal to {len(all_possibilities)}")
+    crop_sizes = random.sample(all_possibilities, n_crop_sizes)
+    return crop_sizes
+
+
+def random_resized_crop(img, rng, image_width_height_clip, n_subimg, crop_sizes):
+    # sideY, sideX = img.shape[2:4]
+    # max_size = min(sideX, sideY)
+    # min_size = min(sideX, sideY, shape[0])
+
+    # rng, subrng = jax.random.split(rng)
+    # # size = jax.random.choice(subrng, jnp.array([min_size, max_size])).item()
+    # size = jax.random.randint(subrng, shape=(1,), minval=min_size, maxval=max_size).item()
 
     final_shape = img.shape
-    final_shape = jax.ops.index_update(final_shape, jax.ops.index[-2], shape[0])
-    final_shape = jax.ops.index_update(final_shape, jax.ops.index[-1], shape[1])
+    final_shape = jax.ops.index_update(final_shape, jax.ops.index[-2], image_width_height_clip)
+    final_shape = jax.ops.index_update(final_shape, jax.ops.index[-1], image_width_height_clip)
 
     metrics = {}
     cutouts = []
 
     for i in range(n_subimg):
         rng, subrng = jax.random.split(rng)
-        cutout = resized_and_crop(img, subrng, final_shape, size, sideX, sideY)
+        cutout = resized_and_crop(img, subrng, final_shape, crop_sizes=crop_sizes)
         cutouts.append(cutout)
-    
+
     cutouts = jnp.concatenate(cutouts, axis=0)
     return cutouts, metrics
+
 
 def speric_distance(embed_img):
     dist = jnp.add(embed_img, -text_embeds)
     dist = jax.numpy.linalg.norm(dist, ord=2, axis=-1)
     return jnp.arcsin(dist / 2) ** 2 * 2
-
 
 
 if __name__ == "__main__":
@@ -457,7 +466,9 @@ if __name__ == "__main__":
     vqgan_decode_fn = jax.jit(vqgan_model.decode)
     vqgan_quantize_fn = jax.jit(straight_through_quantize)
 
-    def train_step(rng, state, text_embeds, n_subimg):
+    crop_sizes = get_crop_sizes(data_args.image_width, data_args.image_height, cut_size)
+
+    def train_step(rng, state, text_embeds, n_subimg, crop_sizes):
         def loss_fn(params, rng):
             z_latent_q = vqgan_quantize_fn(params)
             output_vqgan_decoder = clip_with_grad((vqgan_decode_fn(z_latent_q) + 1) / 2)  # deterministic ??
@@ -466,7 +477,7 @@ if __name__ == "__main__":
 
             rng, subrng = jax.random.split(rng)
             imgs_stacked, metrics = random_resized_crop(
-                output_vqgan_decoder_reshaped, subrng, shape=(cut_size, cut_size), n_subimg=n_subimg
+                output_vqgan_decoder_reshaped, subrng, image_width_height_clip=cut_size, n_subimg=n_subimg, crop_sizes=crop_sizes
             )
             image_embeds = clip_get_image_features_fn(pixel_values=imgs_stacked)
 
@@ -485,11 +496,7 @@ if __name__ == "__main__":
 
         new_state = state.apply_gradients(grads=grad)
 
-        metrics.update({
-            "loss": loss, 
-            "step": state.step, 
-            "image": output_vqgan_decoder
-        })
+        metrics.update({"loss": loss, "step": state.step, "image": output_vqgan_decoder})
 
         return new_state, metrics
 
@@ -504,15 +511,14 @@ if __name__ == "__main__":
 
             rng, subrng = jax.random.split(rng)
             state, train_metric = train_step(
-                    rng=subrng, 
-                    state=state, 
-                    text_embeds=text_embeds, 
-                    n_subimg=training_args.cut_num,
-                )
+                rng=subrng,
+                state=state,
+                text_embeds=text_embeds,
+                n_subimg=training_args.cut_num,
+            )
 
             train_time_step = time.time() - train_start
             train_time += train_time_step
-            
 
             # trick, not used
             # state.replace(params= jnp.clip(state.params, a_min=z_min, a_max=z_max))
@@ -520,7 +526,9 @@ if __name__ == "__main__":
             # Save metrics
             if jax.process_index() == 0:
                 train_metric.update({"time": train_time, "train_time_step": train_time_step})
-                train_metric["image"] = wandb.Image(Image.fromarray(np.asarray((train_metric["image"][0] * 255).astype(np.uint8))))
+                train_metric["image"] = wandb.Image(
+                    Image.fromarray(np.asarray((train_metric["image"][0] * 255).astype(np.uint8)))
+                )
                 train_metric["loss"] = np.asarray(train_metric["loss"])
                 wandb.log(train_metric)
             if training_args.max_steps > 0 and compt > training_args.max_steps:

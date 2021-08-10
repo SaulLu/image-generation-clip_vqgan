@@ -1,4 +1,5 @@
 git+https://github.com/SaulLu/vqgan-jax@create-package 
+git+https://github.com/deepmind/dm_pix
 numpy==1.19.5
 jax==0.2.17
 optax==0.0.9
