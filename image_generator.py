@@ -305,9 +305,10 @@ def random_resized_crop(img, rng, image_width_height_clip, n_subimg, crop_size):
     # # size = jax.random.choice(subrng, jnp.array([min_size, max_size])).item()
     # size = jax.random.randint(subrng, shape=(1,), minval=min_size, maxval=max_size).item()
 
-    final_shape = img.shape
-    final_shape = jax.ops.index_update(final_shape, jax.ops.index[-2], image_width_height_clip)
-    final_shape = jax.ops.index_update(final_shape, jax.ops.index[-1], image_width_height_clip)
+    # final_shape = img.shape
+    # final_shape = jax.ops.index_update(final_shape, jax.ops.index[-2], image_width_height_clip)
+    # final_shape = jax.ops.index_update(final_shape, jax.ops.index[-1], image_width_height_clip)
+    final_shape = (3, image_width_height_clip, image_width_height_clip)
 
     metrics = {}
     cutouts = []
