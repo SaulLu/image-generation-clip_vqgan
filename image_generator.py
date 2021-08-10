@@ -533,7 +533,7 @@ if __name__ == "__main__":
             train_start = time.time()
 
             rng, subrng = jax.random.split(rng)
-            crop_size = jax.random.choice(subrng, possible_crop_sizes)
+            crop_size = possible_crop_sizes[compt%training_args.n_crop_sizes]
             rng, subrng = jax.random.split(rng)
             state, train_metric = train_step(
                 rng=subrng,
