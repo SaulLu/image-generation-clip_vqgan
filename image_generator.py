@@ -162,6 +162,14 @@ class TrainingArguments:
             )
         },
     )
+    n_crop_sizes:  Optional[int] = field(
+        default=8,
+        metadata={
+            "help": (
+                "The number of possible size (jax constrain) #TODO polish"
+            )
+        },
+    )
 
 
 class TrainState(struct.PyTreeNode):
@@ -475,7 +483,7 @@ if __name__ == "__main__":
     vqgan_decode_fn = jax.jit(vqgan_model.decode)
     vqgan_quantize_fn = jax.jit(straight_through_quantize)
 
-    crop_sizes = get_crop_sizes(data_args.image_width, data_args.image_height, cut_size)
+    crop_sizes = get_crop_sizes(data_args.image_width, data_args.image_height, cut_size, n_crop_sizes=training_args.n_crop_sizes)
 
     def train_step(rng, state, text_embeds, n_subimg, crop_sizes):
         def loss_fn(params, rng):
