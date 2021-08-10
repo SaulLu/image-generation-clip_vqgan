@@ -294,6 +294,7 @@ def get_crop_sizes(image_width, image_height, min_image_width_height, n_crop_siz
     if len(all_possibilities) < n_crop_sizes:
         raise ValueError(f"`n_crop_sizes` {n_crop_sizes} must be superior or equal to {len(all_possibilities)}")
     crop_sizes = random.sample(all_possibilities, n_crop_sizes)
+    crop_sizes = [(1,3, crop_size, crop_size) for crop_size in crop_sizes]
     return crop_sizes
 
 
