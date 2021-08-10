@@ -39,10 +39,18 @@ from flax.training.common_utils import get_metrics
 from jax import custom_vjp
 from PIL import Image
 from torchvision.transforms import functional as TF
-from transformers import (AutoConfig, AutoTokenizer, CLIPFeatureExtractor,
-                          CLIPProcessor, CLIPTokenizer, CLIPTokenizerFast,
-                          FlaxCLIPModel, HfArgumentParser,
-                          is_tensorboard_available, set_seed)
+from transformers import (
+    AutoConfig,
+    AutoTokenizer,
+    CLIPFeatureExtractor,
+    CLIPProcessor,
+    CLIPTokenizer,
+    CLIPTokenizerFast,
+    FlaxCLIPModel,
+    HfArgumentParser,
+    is_tensorboard_available,
+    set_seed,
+)
 from vqgan_jax.modeling_flax_vqgan import VQModel
 
 
@@ -132,6 +140,7 @@ class TrainingArguments:
     # warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
     logging_steps: int = field(default=1, metadata={"help": "Log every X updates steps."})
+    logging_steps_heavy: int = field(default=10, metadata={"help": "Log every X updates steps heavy data such as image."})
     save_steps: int = field(default=0, metadata={"help": "Save image every X updates steps."})
     save_total_limit: Optional[int] = field(
         default=None,
@@ -477,7 +486,11 @@ if __name__ == "__main__":
 
             rng, subrng = jax.random.split(rng)
             imgs_stacked, metrics = random_resized_crop(
-                output_vqgan_decoder_reshaped, subrng, image_width_height_clip=cut_size, n_subimg=n_subimg, crop_sizes=crop_sizes
+                output_vqgan_decoder_reshaped,
+                subrng,
+                image_width_height_clip=cut_size,
+                n_subimg=n_subimg,
+                crop_sizes=crop_sizes,
             )
             image_embeds = clip_get_image_features_fn(pixel_values=imgs_stacked)
 
@@ -524,11 +537,12 @@ if __name__ == "__main__":
             # state.replace(params= jnp.clip(state.params, a_min=z_min, a_max=z_max))
 
             # Save metrics
-            if jax.process_index() == 0:
+            if jax.process_index() == 0 and compt % training_args.logging_steps == 0:
                 train_metric.update({"time": train_time, "train_time_step": train_time_step})
-                train_metric["image"] = wandb.Image(
-                    Image.fromarray(np.asarray((train_metric["image"][0] * 255).astype(np.uint8)))
-                )
+                if compt%training_args.logging_steps_heavy:
+                    train_metric["image"] = wandb.Image(
+                        Image.fromarray(np.asarray((train_metric["image"][0] * 255).astype(np.uint8)))
+                    )
                 train_metric["loss"] = np.asarray(train_metric["loss"])
                 wandb.log(train_metric)
             if training_args.max_steps > 0 and compt > training_args.max_steps:
