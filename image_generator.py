@@ -140,7 +140,9 @@ class TrainingArguments:
     # warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
     logging_steps: int = field(default=1, metadata={"help": "Log every X updates steps."})
-    logging_steps_heavy: int = field(default=10, metadata={"help": "Log every X updates steps heavy data such as image."})
+    logging_steps_heavy: int = field(
+        default=10, metadata={"help": "Log every X updates steps heavy data such as image."}
+    )
     save_steps: int = field(default=0, metadata={"help": "Save image every X updates steps."})
     save_total_limit: Optional[int] = field(
         default=None,
@@ -162,13 +164,9 @@ class TrainingArguments:
             )
         },
     )
-    n_crop_sizes:  Optional[int] = field(
+    n_crop_sizes: Optional[int] = field(
         default=8,
-        metadata={
-            "help": (
-                "The number of possible size (jax constrain) #TODO polish"
-            )
-        },
+        metadata={"help": ("The number of possible size (jax constrain) #TODO polish")},
     )
 
 
@@ -313,14 +311,17 @@ def random_resized_crop(img, rng, image_width_height_clip, n_subimg, crop_size):
 
     metrics = {}
     cutouts = []
-    crop_sizes = (1,3, crop_size, crop_size)
+    crop_sizes = (1, 3, crop_size, crop_size)
+    resized_and_crop_custom = lambda x:  resized_and_crop(img, x, final_shape, crop_sizes=crop_sizes)
+    keys = jax.random.split(rng, n_subimg)
+    cutouts = jax.vmap(resized_and_crop_custom)(keys)
 
-    for i in range(n_subimg):
-        rng, subrng = jax.random.split(rng)
-        cutout = resized_and_crop(img, subrng, final_shape, crop_sizes=crop_sizes)
-        cutouts.append(cutout)
+    # for i in range(n_subimg):
+    #     rng, subrng = jax.random.split(rng)
+    #     cutout = resized_and_crop(img, subrng, final_shape, crop_sizes=crop_sizes)
+    #     cutouts.append(cutout)
 
-    cutouts = jnp.concatenate(cutouts, axis=0)
+    # cutouts = jnp.concatenate(cutouts, axis=0)
     return cutouts, metrics
 
 
@@ -485,7 +486,9 @@ if __name__ == "__main__":
     vqgan_decode_fn = jax.jit(vqgan_model.decode)
     vqgan_quantize_fn = jax.jit(straight_through_quantize)
 
-    possible_crop_sizes = get_possible_crop_sizes(data_args.image_width, data_args.image_height, cut_size, n_crop_sizes=training_args.n_crop_sizes)
+    possible_crop_sizes = get_possible_crop_sizes(
+        data_args.image_width, data_args.image_height, cut_size, n_crop_sizes=training_args.n_crop_sizes
+    )
 
     def train_step(rng, state, text_embeds, n_subimg, crop_size):
         def loss_fn(params, rng):
@@ -533,14 +536,10 @@ if __name__ == "__main__":
             train_start = time.time()
 
             rng, subrng = jax.random.split(rng)
-            crop_size = possible_crop_sizes[compt%training_args.n_crop_sizes]
+            crop_size = possible_crop_sizes[compt % training_args.n_crop_sizes]
             rng, subrng = jax.random.split(rng)
             state, train_metric = train_step(
-                rng=subrng,
-                state=state,
-                text_embeds=text_embeds,
-                n_subimg=training_args.cut_num,
-                crop_size=crop_size
+                rng=subrng, state=state, text_embeds=text_embeds, n_subimg=training_args.cut_num, crop_size=crop_size
             )
 
             train_time_step = time.time() - train_start
@@ -552,7 +551,7 @@ if __name__ == "__main__":
             # Save metrics
             if jax.process_index() == 0 and compt % training_args.logging_steps == 0:
                 train_metric.update({"time": train_time, "train_time_step": train_time_step})
-                if compt%training_args.logging_steps_heavy:
+                if compt % training_args.logging_steps_heavy:
                     train_metric["image"] = wandb.Image(
                         Image.fromarray(np.asarray((train_metric["image"][0] * 255).astype(np.uint8)))
                     )
