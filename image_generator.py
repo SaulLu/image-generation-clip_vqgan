@@ -491,7 +491,7 @@ if __name__ == "__main__":
     )
 
     state = TrainState.create(
-        params=z, tx=optimizer, grad_accum=jax.tree_map(jnp.zeros_like, z.params), optimizer_step=0
+        params=z, tx=optimizer, grad_accum=jax.tree_map(jnp.zeros_like, z), optimizer_step=0
     )
 
     def straight_through_quantize(x):
