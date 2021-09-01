@@ -168,6 +168,10 @@ class TrainingArguments:
         default=8,
         metadata={"help": ("The number of possible size (jax constrain) #TODO polish")},
     )
+    gradient_accumulation_steps = field(
+        default=8,
+        metadata={"help": ("Number of updates steps to accumulate the gradients for, before performing a backward/update pass.")},
+    ) 
 
 
 class TrainState(struct.PyTreeNode):
@@ -205,6 +209,8 @@ class TrainState(struct.PyTreeNode):
     params: core.FrozenDict[str, Any]
     tx: optax.GradientTransformation = struct.field(pytree_node=False)
     opt_state: optax.OptState
+    grad_accum: jnp.ndarray
+    optimizer_step: int
 
     def apply_gradients(self, *, grads, **kwargs):
         """Updates `step`, `params`, `opt_state` and `**kwargs` in return value.
@@ -231,7 +237,7 @@ class TrainState(struct.PyTreeNode):
         )
 
     @classmethod
-    def create(cls, *, params, tx, **kwargs):
+    def create(cls, *, params, grad_accum, optimizer_step, tx, **kwargs):
         """Creates a new instance with `step=0` and initialized `opt_state`."""
         opt_state = tx.init(params)
         return cls(
@@ -239,6 +245,8 @@ class TrainState(struct.PyTreeNode):
             params=params,
             tx=tx,
             opt_state=opt_state,
+            grad_accum=grad_accum,
+            optimizer_step=optimizer_step,
             **kwargs,
         )
 
@@ -313,7 +321,7 @@ def random_resized_crop(img, rng, image_width_height_clip, n_subimg, crop_size):
     metrics = {}
     cutouts = []
     crop_sizes = (3, crop_size, crop_size)
-    resized_and_crop_custom = lambda x:  resized_and_crop(img[0], x, final_shape, crop_sizes=crop_sizes)
+    resized_and_crop_custom = lambda x: resized_and_crop(img[0], x, final_shape, crop_sizes=crop_sizes)
     keys = jax.random.split(rng, n_subimg)
     cutouts = jax.vmap(resized_and_crop_custom)(keys)
 
@@ -478,7 +486,12 @@ if __name__ == "__main__":
         weight_decay=training_args.weight_decay,
     )
 
-    state = TrainState.create(params=z, tx=optimizer)
+    state = TrainState.create(
+        params=z,
+        tx=optimizer,
+        grad_accum=jax.tree_map(jnp.zeros_like, z.params),
+        optimizer_step=0
+    )
 
     def straight_through_quantize(x):
         return x + jax.lax.stop_gradient(vqgan_model.quantize(x)[0] - x)
@@ -491,7 +504,7 @@ if __name__ == "__main__":
         data_args.image_width, data_args.image_height, cut_size, n_crop_sizes=training_args.n_crop_sizes
     )
 
-    def train_step(rng, state, text_embeds, n_subimg, crop_size):
+    def train_step(rng, state, n_subimg, crop_size):
         def loss_fn(params, rng):
             z_latent_q = vqgan_quantize_fn(params)
             output_vqgan_decoder = clip_with_grad((vqgan_decode_fn(z_latent_q) + 1) / 2)  # deterministic ??
@@ -521,6 +534,23 @@ if __name__ == "__main__":
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
         (loss, (output_vqgan_decoder, metrics)), grad = grad_fn(state.params, subrng)
 
+        grad_accum = jax.tree_multimap(lambda x, y: x + y, grad, state.grad_accum)
+
+        def update_fn():
+            grads = jax.tree_map(lambda x: x / training_args.gradient_accumulation_steps, grad_accum)
+            grads = jax.lax.pmean(grads, "batch")
+            new_state = state.apply_gradients(
+                grads=grads, grad_accum=jax.tree_map(jnp.zeros_like, grads), optimizer_step=state.optimizer_step + 1
+            )
+            return new_state
+
+        new_state = jax.lax.cond(
+            (state.step + 1) % training_args.gradient_accumulation_steps == 0,
+            lambda _: update_fn(),
+            lambda _: state.replace(grad_accum=grad_accum, step=state.step + 1),
+            None,
+        )        
+
         new_state = state.apply_gradients(grads=grad)
 
         metrics.update({"loss": loss, "step": state.step, "image": output_vqgan_decoder})
@@ -540,7 +570,7 @@ if __name__ == "__main__":
             crop_size = possible_crop_sizes[compt % training_args.n_crop_sizes]
             rng, subrng = jax.random.split(rng)
             state, train_metric = train_step(
-                rng=subrng, state=state, text_embeds=text_embeds, n_subimg=training_args.cut_num, crop_size=crop_size
+                rng=subrng, state=state, n_subimg=training_args.cut_num, crop_size=crop_size
             )
 
             train_time_step = time.time() - train_start
