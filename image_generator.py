@@ -168,7 +168,7 @@ class TrainingArguments:
         default=8,
         metadata={"help": ("The number of possible size (jax constrain) #TODO polish")},
     )
-    gradient_accumulation_steps = field(
+    gradient_accumulation_steps: Optional[int] = field(
         default=8,
         metadata={"help": ("Number of updates steps to accumulate the gradients for, before performing a backward/update pass.")},
     ) 
