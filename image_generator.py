@@ -170,8 +170,12 @@ class TrainingArguments:
     )
     gradient_accumulation_steps: Optional[int] = field(
         default=8,
-        metadata={"help": ("Number of updates steps to accumulate the gradients for, before performing a backward/update pass.")},
-    ) 
+        metadata={
+            "help": (
+                "Number of updates steps to accumulate the gradients for, before performing a backward/update pass."
+            )
+        },
+    )
 
 
 class TrainState(struct.PyTreeNode):
@@ -487,10 +491,7 @@ if __name__ == "__main__":
     )
 
     state = TrainState.create(
-        params=z,
-        tx=optimizer,
-        grad_accum=jax.tree_map(jnp.zeros_like, z.params),
-        optimizer_step=0
+        params=z, tx=optimizer, grad_accum=jax.tree_map(jnp.zeros_like, z.params), optimizer_step=0
     )
 
     def straight_through_quantize(x):
@@ -549,7 +550,7 @@ if __name__ == "__main__":
             lambda _: update_fn(),
             lambda _: state.replace(grad_accum=grad_accum, step=state.step + 1),
             None,
-        )        
+        )
 
         new_state = state.apply_gradients(grads=grad)
 
