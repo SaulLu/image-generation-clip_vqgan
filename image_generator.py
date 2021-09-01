@@ -539,7 +539,6 @@ if __name__ == "__main__":
 
         def update_fn():
             grads = jax.tree_map(lambda x: x / training_args.gradient_accumulation_steps, grad_accum)
-            grads = jax.lax.pmean(grads, "batch")
             new_state = state.apply_gradients(
                 grads=grads, grad_accum=jax.tree_map(jnp.zeros_like, grads), optimizer_step=state.optimizer_step + 1
             )
