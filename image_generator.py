@@ -270,10 +270,11 @@ def resample(input, size, align_corners=True):
 
 
 def resized_and_crop(img, rng, final_shape, crop_sizes):
-    # size = jax.random.randint(subrng, shape=(1,), minval=min_size, maxval=max_size).item()
     rng, subrng = jax.random.split(rng)
     cutout = pix.random_crop(key=subrng, image=img, crop_sizes=crop_sizes)
+    # Previous strategy
 
+    # size = jax.random.randint(subrng, shape=(1,), minval=min_size, maxval=max_size).item()
     # offsetx = jax.random.randint(subrng, shape=(1,), minval=0, maxval=sideX - size + 1).item()
 
     # rng, subrng = jax.random.split(rng)
@@ -292,11 +293,19 @@ def get_possible_crop_sizes(image_width, image_height, min_image_width_height, n
     if len(all_possibilities) < n_crop_sizes:
         raise ValueError(f"`n_crop_sizes` {n_crop_sizes} must be superior or equal to {len(all_possibilities)}")
     possible_crop_sizes = random.sample(all_possibilities, n_crop_sizes)
-    # crop_sizes = [(1,3, crop_size, crop_size) for crop_size in crop_sizes]
     return possible_crop_sizes
 
 
 def random_resized_crop(img, rng, image_width_height_clip, n_subimg, crop_size):
+    final_shape = (3, image_width_height_clip, image_width_height_clip)
+
+    metrics = {}
+    cutouts = []
+    crop_sizes = (3, crop_size, crop_size)
+    resized_and_crop_custom = lambda x:  resized_and_crop(img[0], x, final_shape, crop_sizes=crop_sizes)
+    keys = jax.random.split(rng, n_subimg)
+    cutouts = jax.vmap(resized_and_crop_custom)(keys)
+    # Previous strategy
     # sideY, sideX = img.shape[2:4]
     # max_size = min(sideX, sideY)
     # min_size = min(sideX, sideY, shape[0])
@@ -308,14 +317,6 @@ def random_resized_crop(img, rng, image_width_height_clip, n_subimg, crop_size):
     # final_shape = img.shape
     # final_shape = jax.ops.index_update(final_shape, jax.ops.index[-2], image_width_height_clip)
     # final_shape = jax.ops.index_update(final_shape, jax.ops.index[-1], image_width_height_clip)
-    final_shape = (3, image_width_height_clip, image_width_height_clip)
-
-    metrics = {}
-    cutouts = []
-    crop_sizes = (3, crop_size, crop_size)
-    resized_and_crop_custom = lambda x:  resized_and_crop(img[0], x, final_shape, crop_sizes=crop_sizes)
-    keys = jax.random.split(rng, n_subimg)
-    cutouts = jax.vmap(resized_and_crop_custom)(keys)
 
     # for i in range(n_subimg):
     #     rng, subrng = jax.random.split(rng)

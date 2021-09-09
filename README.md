@@ -33,3 +33,6 @@ and you can see all the possible options by doing:
 python image_generator.py --help
 ```
 
+You can also directly use google collaboratory notebooks
+- [Link to the notebook for FLAX/JAX](http://colab.research.google.com/github/SaulLu/image-generation-clip_vqgan/blob/main/notebooks/google_collaboratory_jax_flax_version.ipynb)
+- [Link to the notebook for pytorch](http://colab.research.google.com/github/SaulLu/image-generation-clip_vqgan/blob/main/notebooks/google_collaboratory_torch_version.ipynb)
