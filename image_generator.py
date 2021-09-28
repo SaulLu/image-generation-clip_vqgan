@@ -62,10 +62,15 @@ class ModelArguments:
 
     clip_model_name_or_path: Optional[str] = field(
         default="openai/clip-vit-base-patch32",
-        metadata={"help": "The model checkpoint for weights initialization of CLIP model."},
+        metadata={
+            "help": "The model checkpoint for weights initialization of CLIP model."
+        },
     )
     clip_config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as clip_model_name_or_path"}
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as clip_model_name_or_path"
+        },
     )
     clip_tokenizer_name: Optional[str] = field(
         default=None,
@@ -75,33 +80,43 @@ class ModelArguments:
     )
     vqgan_model_name_or_path: Optional[str] = field(
         default="valhalla/vqgan-imagenet-f16-1024",
-        metadata={"help": "The model checkpoint for weights initialization of VQGAN model."},
+        metadata={
+            "help": "The model checkpoint for weights initialization of VQGAN model."
+        },
     )
     vqgan_config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as vqgan_model_name_or_path"}
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as vqgan_model_name_or_path"
+        },
     )
 
     cache_dir: Optional[str] = field(
-        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
+        default=None,
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from s3"
+        },
     )
     use_fast_tokenizer: bool = field(
         default=False,  # todo: change
-        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+        metadata={
+            "help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."
+        },
     )
 
 
 @dataclass
 class ImageGenerationArguments:
     texts_prompts: List[str] = field(
-        metadata={"help": "the list of texts that the generated image should look like."},
+        metadata={
+            "help": "the list of texts that the generated image should look like."
+        }
     )
     image_width: Optional[int] = field(
-        default=480,
-        metadata={"help": "The width of the generated image."},
+        default=480, metadata={"help": "The width of the generated image."}
     )
     image_height: Optional[int] = field(
-        default=480,
-        metadata={"help": "The height of the generated image."},
+        default=480, metadata={"help": "The height of the generated image."}
     )
 
 
@@ -109,7 +124,9 @@ class ImageGenerationArguments:
 class TrainingArguments:
 
     output_dir: str = field(
-        metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
+        metadata={
+            "help": "The output directory where the model predictions and checkpoints will be written."
+        }
     )
     overwrite_output_dir: bool = field(
         default=False,
@@ -120,15 +137,27 @@ class TrainingArguments:
             )
         },
     )
-    learning_rate: float = field(default=0.05, metadata={"help": "The initial learning rate for AdamW."})
-    weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
-    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
-    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
-    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
+    learning_rate: float = field(
+        default=0.05, metadata={"help": "The initial learning rate for AdamW."}
+    )
+    weight_decay: float = field(
+        default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."}
+    )
+    adam_beta1: float = field(
+        default=0.9, metadata={"help": "Beta1 for AdamW optimizer"}
+    )
+    adam_beta2: float = field(
+        default=0.999, metadata={"help": "Beta2 for AdamW optimizer"}
+    )
+    adam_epsilon: float = field(
+        default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."}
+    )
 
     max_steps: int = field(
         default=-1,
-        metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
+        metadata={
+            "help": "If > 0: set total number of training steps to perform. Override num_train_epochs."
+        },
     )
     # lr_scheduler_type: SchedulerType = field(
     #     default="linear",
@@ -139,11 +168,16 @@ class TrainingArguments:
     # )
     # warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
-    logging_steps: int = field(default=1, metadata={"help": "Log every X updates steps."})
-    logging_steps_heavy: int = field(
-        default=10, metadata={"help": "Log every X updates steps heavy data such as image."}
+    logging_steps: int = field(
+        default=1, metadata={"help": "Log every X updates steps."}
     )
-    save_steps: int = field(default=0, metadata={"help": "Save image every X updates steps."})
+    logging_steps_heavy: int = field(
+        default=10,
+        metadata={"help": "Log every X updates steps heavy data such as image."},
+    )
+    save_steps: int = field(
+        default=0, metadata={"help": "Save image every X updates steps."}
+    )
     save_total_limit: Optional[int] = field(
         default=None,
         metadata={
@@ -153,7 +187,10 @@ class TrainingArguments:
             )
         },
     )
-    seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
+    seed: int = field(
+        default=42,
+        metadata={"help": "Random seed that will be set at the beginning of training."},
+    )
     cut_num: Optional[int] = field(
         default=5,
         metadata={
@@ -224,23 +261,14 @@ class TrainState(struct.PyTreeNode):
         updates, new_opt_state = self.tx.update(grads, self.opt_state, self.params)
         new_params = optax.apply_updates(self.params, updates)
         return self.replace(
-            step=self.step + 1,
-            params=new_params,
-            opt_state=new_opt_state,
-            **kwargs,
+            step=self.step + 1, params=new_params, opt_state=new_opt_state, **kwargs
         )
 
     @classmethod
     def create(cls, *, params, tx, **kwargs):
         """Creates a new instance with `step=0` and initialized `opt_state`."""
         opt_state = tx.init(params)
-        return cls(
-            step=0,
-            params=params,
-            tx=tx,
-            opt_state=opt_state,
-            **kwargs,
-        )
+        return cls(step=0, params=params, tx=tx, opt_state=opt_state, **kwargs)
 
 
 # f :: a -> b
@@ -285,13 +313,17 @@ def resized_and_crop(img, rng, final_shape, crop_sizes):
     return resample(cutout, final_shape)
 
 
-def get_possible_crop_sizes(image_width, image_height, min_image_width_height, n_crop_sizes):
+def get_possible_crop_sizes(
+    image_width, image_height, min_image_width_height, n_crop_sizes
+):
     max_size = min(image_width, image_height)
     min_size = min(image_width, image_height, min_image_width_height)
 
     all_possibilities = list(range(min_size, max_size + 1))
     if len(all_possibilities) < n_crop_sizes:
-        raise ValueError(f"`n_crop_sizes` {n_crop_sizes} must be superior or equal to {len(all_possibilities)}")
+        raise ValueError(
+            f"`n_crop_sizes` {n_crop_sizes} must be superior or equal to {len(all_possibilities)}"
+        )
     possible_crop_sizes = random.sample(all_possibilities, n_crop_sizes)
     return possible_crop_sizes
 
@@ -302,7 +334,9 @@ def random_resized_crop(img, rng, image_width_height_clip, n_subimg, crop_size):
     metrics = {}
     cutouts = []
     crop_sizes = (3, crop_size, crop_size)
-    resized_and_crop_custom = lambda x:  resized_and_crop(img[0], x, final_shape, crop_sizes=crop_sizes)
+    resized_and_crop_custom = lambda x: resized_and_crop(
+        img[0], x, final_shape, crop_sizes=crop_sizes
+    )
     keys = jax.random.split(rng, n_subimg)
     cutouts = jax.vmap(resized_and_crop_custom)(keys)
     # Previous strategy
@@ -327,22 +361,20 @@ def random_resized_crop(img, rng, image_width_height_clip, n_subimg, crop_size):
     return cutouts, metrics
 
 
-def speric_distance(embed_img):
-    dist = jnp.add(embed_img, -text_embeds)
-    dist = jax.numpy.linalg.norm(dist, ord=2, axis=-1)
-    return jnp.arcsin(dist / 2) ** 2 * 2
-
-
 if __name__ == "__main__":
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, ImageGenerationArguments, TrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, ImageGenerationArguments, TrainingArguments)
+    )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
@@ -374,11 +406,15 @@ if __name__ == "__main__":
     # Load clip tokenizer
     if model_args.clip_tokenizer_name:
         tokenizer = CLIPTokenizer.from_pretrained(
-            model_args.clip_tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+            model_args.clip_tokenizer_name,
+            cache_dir=model_args.cache_dir,
+            use_fast=model_args.use_fast_tokenizer,
         )
     elif model_args.clip_model_name_or_path:
         tokenizer = CLIPTokenizer.from_pretrained(
-            model_args.clip_model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+            model_args.clip_model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            use_fast=model_args.use_fast_tokenizer,
         )
     else:
         raise ValueError(
@@ -387,9 +423,13 @@ if __name__ == "__main__":
 
     # Load CLIP model
     if model_args.clip_config_name:
-        clip_config = AutoConfig.from_pretrained(model_args.clip_config_name, cache_dir=model_args.cache_dir)
+        clip_config = AutoConfig.from_pretrained(
+            model_args.clip_config_name, cache_dir=model_args.cache_dir
+        )
     elif model_args.clip_model_name_or_path:
-        clip_config = AutoConfig.from_pretrained(model_args.clip_model_name_or_path, cache_dir=model_args.cache_dir)
+        clip_config = AutoConfig.from_pretrained(
+            model_args.clip_model_name_or_path, cache_dir=model_args.cache_dir
+        )
     else:
         raise ValueError(
             "This script does not train a model, you must choose an already trained CLIP model, using --clip_model_name_or_path."
@@ -397,8 +437,7 @@ if __name__ == "__main__":
 
     if model_args.clip_model_name_or_path:
         clip_model = FlaxCLIPModel.from_pretrained(
-            model_args.clip_model_name_or_path,
-            config=clip_config,
+            model_args.clip_model_name_or_path, config=clip_config
         )
     else:
         raise ValueError(
@@ -427,11 +466,7 @@ if __name__ == "__main__":
         )
 
     # init logging utils
-    combined_dict = {
-        **asdict(model_args),
-        **asdict(data_args),
-        **asdict(training_args),
-    }
+    combined_dict = {**asdict(model_args), **asdict(data_args), **asdict(training_args)}
     wandb.init(project="vqgan-clip", dir=training_args.output_dir)
     wandb.config.update(combined_dict, allow_val_change=True)
 
@@ -459,14 +494,21 @@ if __name__ == "__main__":
 
         return text_embeds
 
-    inputs = tokenizer(data_args.texts_prompts, padding="max_length", max_length=context_length, return_tensors="jax")
+    inputs = tokenizer(
+        data_args.texts_prompts,
+        padding="max_length",
+        max_length=context_length,
+        return_tensors="jax",
+    )
     text_embeds = create_text_embedding(inputs)
 
     rng = jax.random.PRNGKey(training_args.seed)
 
     # Create a first random VQGAN latent image representation
     rng, subrng = jax.random.split(rng)
-    one_hot = jax.nn.one_hot(jax.random.randint(subrng, [toksY * toksX], 0, n_toks), n_toks)
+    one_hot = jax.nn.one_hot(
+        jax.random.randint(subrng, [toksY * toksX], 0, n_toks), n_toks
+    )
     z = jnp.matmul(one_hot, vqgan_model.params["quantize"]["embedding"]["embedding"])
     z = jnp.reshape(z, (-1, toksY, toksX, e_dim))
 
@@ -489,15 +531,27 @@ if __name__ == "__main__":
     vqgan_quantize_fn = jax.jit(straight_through_quantize)
 
     possible_crop_sizes = get_possible_crop_sizes(
-        data_args.image_width, data_args.image_height, cut_size, n_crop_sizes=training_args.n_crop_sizes
+        data_args.image_width,
+        data_args.image_height,
+        cut_size,
+        n_crop_sizes=training_args.n_crop_sizes,
     )
 
-    def train_step(rng, state, text_embeds, n_subimg, crop_size):
+    def speric_distance(embed_img):
+        dist = jnp.add(embed_img, -text_embeds)
+        dist = jax.numpy.linalg.norm(dist, ord=2, axis=-1)
+        return jnp.arcsin(dist / 2) ** 2 * 2
+
+    def train_step(rng, state, n_subimg, crop_size):
         def loss_fn(params, rng):
             z_latent_q = vqgan_quantize_fn(params)
-            output_vqgan_decoder = clip_with_grad((vqgan_decode_fn(z_latent_q) + 1) / 2)  # deterministic ??
+            output_vqgan_decoder = clip_with_grad(
+                (vqgan_decode_fn(z_latent_q) + 1) / 2
+            )  # deterministic ??
 
-            output_vqgan_decoder_reshaped = jnp.moveaxis(output_vqgan_decoder, (2, 1), (3, 2))
+            output_vqgan_decoder_reshaped = jnp.moveaxis(
+                output_vqgan_decoder, (2, 1), (3, 2)
+            )
 
             rng, subrng = jax.random.split(rng)
             imgs_stacked, metrics = random_resized_crop(
@@ -510,7 +564,9 @@ if __name__ == "__main__":
             image_embeds = clip_get_image_features_fn(pixel_values=imgs_stacked)
 
             # normalized features
-            image_embeds = image_embeds / jnp.linalg.norm(image_embeds, axis=-1, keepdims=True)
+            image_embeds = image_embeds / jnp.linalg.norm(
+                image_embeds, axis=-1, keepdims=True
+            )
 
             # compute distance
             dists = jax.vmap(speric_distance, in_axes=0)(image_embeds)
@@ -524,9 +580,13 @@ if __name__ == "__main__":
 
         new_state = state.apply_gradients(grads=grad)
 
-        metrics.update({"loss": loss, "step": state.step, "image": output_vqgan_decoder})
+        metrics.update(
+            {"loss": loss, "step": state.step, "image": output_vqgan_decoder}
+        )
 
         return new_state, metrics
+
+    train_step = jax.jit(train_step, static_argnums=(2, 3))
 
     compt = 0
     stop_training = False
@@ -541,7 +601,10 @@ if __name__ == "__main__":
             crop_size = possible_crop_sizes[compt % training_args.n_crop_sizes]
             rng, subrng = jax.random.split(rng)
             state, train_metric = train_step(
-                rng=subrng, state=state, text_embeds=text_embeds, n_subimg=training_args.cut_num, crop_size=crop_size
+                rng=subrng,
+                state=state,
+                n_subimg=training_args.cut_num,
+                crop_size=crop_size,
             )
 
             train_time_step = time.time() - train_start
@@ -552,10 +615,16 @@ if __name__ == "__main__":
 
             # Save metrics
             if jax.process_index() == 0 and compt % training_args.logging_steps == 0:
-                train_metric.update({"time": train_time, "train_time_step": train_time_step})
+                train_metric.update(
+                    {"time": train_time, "train_time_step": train_time_step}
+                )
                 if compt % training_args.logging_steps_heavy:
                     train_metric["image"] = wandb.Image(
-                        Image.fromarray(np.asarray((train_metric["image"][0] * 255).astype(np.uint8)))
+                        Image.fromarray(
+                            np.asarray(
+                                (train_metric["image"][0] * 255).astype(np.uint8)
+                            )
+                        )
                     )
                 train_metric["loss"] = np.asarray(train_metric["loss"])
                 wandb.log(train_metric)
