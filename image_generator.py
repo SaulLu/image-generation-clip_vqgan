@@ -571,7 +571,7 @@ if __name__ == "__main__":
             dists = jax.vmap(speric_distance, in_axes=0)(image_embeds)
 
             loss = dists.mean()
-            return loss, (output_vqgan_decoder, metrics)
+            return loss, (output_vqgan_decoder, metrics, rng)
 
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
         (loss, (output_vqgan_decoder, metrics, rng)), grad = grad_fn(state.params, rng)
