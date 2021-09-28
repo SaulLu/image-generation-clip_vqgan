@@ -336,7 +336,8 @@ def random_resized_crop(img, rng, image_width_height_clip, n_subimg, crop_size):
     resized_and_crop_custom = lambda x: resized_and_crop(
         img[0], x, final_shape, crop_sizes=crop_sizes
     )
-    rng, *keys = jax.random.split(rng, n_subimg + 1)
+    rng, subrng = jax.random.split(rng)
+    keys = jax.random.split(subrng, n_subimg)
     cutouts = jax.vmap(resized_and_crop_custom)(keys)
     # Previous strategy
     # sideY, sideX = img.shape[2:4]
