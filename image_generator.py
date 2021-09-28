@@ -298,8 +298,7 @@ def resample(input, size, align_corners=True):
 
 
 def resized_and_crop(img, rng, final_shape, crop_sizes):
-    rng, subrng = jax.random.split(rng)
-    cutout = pix.random_crop(key=subrng, image=img, crop_sizes=crop_sizes)
+    cutout = pix.random_crop(key=rng, image=img, crop_sizes=crop_sizes)
     # Previous strategy
 
     # size = jax.random.randint(subrng, shape=(1,), minval=min_size, maxval=max_size).item()
@@ -337,7 +336,7 @@ def random_resized_crop(img, rng, image_width_height_clip, n_subimg, crop_size):
     resized_and_crop_custom = lambda x: resized_and_crop(
         img[0], x, final_shape, crop_sizes=crop_sizes
     )
-    keys = jax.random.split(rng, n_subimg)
+    rng, *keys = jax.random.split(rng, n_subimg + 1)
     cutouts = jax.vmap(resized_and_crop_custom)(keys)
     # Previous strategy
     # sideY, sideX = img.shape[2:4]
@@ -358,7 +357,7 @@ def random_resized_crop(img, rng, image_width_height_clip, n_subimg, crop_size):
     #     cutouts.append(cutout)
 
     # cutouts = jnp.concatenate(cutouts, axis=0)
-    return cutouts, metrics
+    return cutouts, metrics, rng
 
 
 if __name__ == "__main__":
@@ -553,10 +552,9 @@ if __name__ == "__main__":
                 output_vqgan_decoder, (2, 1), (3, 2)
             )
 
-            rng, subrng = jax.random.split(rng)
             imgs_stacked, metrics = random_resized_crop(
                 output_vqgan_decoder_reshaped,
-                subrng,
+                rng,
                 image_width_height_clip=cut_size,
                 n_subimg=n_subimg,
                 crop_size=crop_size,
@@ -574,9 +572,8 @@ if __name__ == "__main__":
             loss = dists.mean()
             return loss, (output_vqgan_decoder, metrics)
 
-        rng, subrng = jax.random.split(rng)
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-        (loss, (output_vqgan_decoder, metrics)), grad = grad_fn(state.params, subrng)
+        (loss, (output_vqgan_decoder, metrics, rng)), grad = grad_fn(state.params, rng)
 
         new_state = state.apply_gradients(grads=grad)
 
@@ -584,7 +581,7 @@ if __name__ == "__main__":
             {"loss": loss, "step": state.step, "image": output_vqgan_decoder}
         )
 
-        return new_state, metrics
+        return new_state, metrics, rng
 
     train_step = jax.jit(train_step, static_argnums=(2, 3))
 
@@ -596,12 +593,9 @@ if __name__ == "__main__":
             compt += 1
             # ======================== Training ================================
             train_start = time.time()
-
-            rng, subrng = jax.random.split(rng)
             crop_size = possible_crop_sizes[compt % training_args.n_crop_sizes]
-            rng, subrng = jax.random.split(rng)
-            state, train_metric = train_step(
-                rng=subrng,
+            state, train_metric, rng = train_step(
+                rng=rng,
                 state=state,
                 n_subimg=training_args.cut_num,
                 crop_size=crop_size,
