@@ -584,7 +584,7 @@ if __name__ == "__main__":
 
         return new_state, metrics, rng
 
-    train_step = jax.jit(train_step, static_argnums=(2, 3))
+    # train_step = jax.jit(train_step, static_argnums=(2, 3))
 
     compt = 0
     stop_training = False
