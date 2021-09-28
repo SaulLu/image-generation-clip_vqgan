@@ -552,7 +552,7 @@ if __name__ == "__main__":
                 output_vqgan_decoder, (2, 1), (3, 2)
             )
 
-            imgs_stacked, metrics = random_resized_crop(
+            imgs_stacked, metrics, rng = random_resized_crop(
                 output_vqgan_decoder_reshaped,
                 rng,
                 image_width_height_clip=cut_size,
