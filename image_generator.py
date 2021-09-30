@@ -526,9 +526,9 @@ if __name__ == "__main__":
     def straight_through_quantize(x):
         return x + jax.lax.stop_gradient(vqgan_model.quantize(x)[0] - x)
 
-    clip_get_image_features_fn = jax.jit(clip_model.get_image_features)
-    vqgan_decode_fn = jax.jit(vqgan_model.decode)
-    vqgan_quantize_fn = jax.jit(straight_through_quantize)
+    clip_get_image_features_fn = clip_model.get_image_features
+    vqgan_decode_fn = vqgan_model.decode
+    vqgan_quantize_fn = straight_through_quantize
 
     possible_crop_sizes = get_possible_crop_sizes(
         data_args.image_width,
