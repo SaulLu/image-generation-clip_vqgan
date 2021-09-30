@@ -596,8 +596,8 @@ if __name__ == "__main__":
             train_start = time.time()
             crop_size = possible_crop_sizes[compt % training_args.n_crop_sizes]
             state, train_metric, rng = train_step(
-                rng=rng,
-                state=state,
+                rng,
+                state,
                 n_subimg=training_args.cut_num,
                 crop_size=crop_size,
             )
